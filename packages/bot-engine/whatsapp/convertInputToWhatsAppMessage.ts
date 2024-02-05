@@ -1,20 +1,21 @@
-import {
-  BubbleBlockType,
-  ButtonItem,
-  ChatReply,
-  InputBlockType,
-} from '@typebot.io/schemas'
+import { ButtonItem, ContinueChatResponse } from '@typebot.io/schemas'
 import { WhatsAppSendingMessage } from '@typebot.io/schemas/features/whatsapp'
-import { convertRichTextToWhatsAppText } from './convertRichTextToWhatsAppText'
 import { isDefined, isEmpty } from '@typebot.io/lib/utils'
+import { BubbleBlockType } from '@typebot.io/schemas/features/blocks/bubbles/constants'
+import { InputBlockType } from '@typebot.io/schemas/features/blocks/inputs/constants'
+import { defaultPictureChoiceOptions } from '@typebot.io/schemas/features/blocks/inputs/pictureChoice/constants'
+import { defaultChoiceInputOptions } from '@typebot.io/schemas/features/blocks/inputs/choice/constants'
+import { convertRichTextToMarkdown } from '@typebot.io/lib/markdown/convertRichTextToMarkdown'
 
 export const convertInputToWhatsAppMessages = (
-  input: NonNullable<ChatReply['input']>,
-  lastMessage: ChatReply['messages'][number] | undefined
+  input: NonNullable<ContinueChatResponse['input']>,
+  lastMessage: ContinueChatResponse['messages'][number] | undefined
 ): WhatsAppSendingMessage[] => {
   const lastMessageText =
     lastMessage?.type === BubbleBlockType.TEXT
-      ? convertRichTextToWhatsAppText(lastMessage.content.richText)
+      ? convertRichTextToMarkdown(lastMessage.content.richText ?? [], {
+          flavour: 'whatsapp',
+        })
       : undefined
   switch (input.type) {
     case InputBlockType.DATE:
@@ -28,7 +29,10 @@ export const convertInputToWhatsAppMessages = (
     case InputBlockType.TEXT:
       return []
     case InputBlockType.PICTURE_CHOICE: {
-      if (input.options.isMultipleChoice)
+      if (
+        input.options?.isMultipleChoice ??
+        defaultPictureChoiceOptions.isMultipleChoice
+      )
         return input.items.flatMap((item, idx) => {
           let bodyText = ''
           if (item.title) bodyText += `*${item.title}*`
@@ -88,7 +92,10 @@ export const convertInputToWhatsAppMessages = (
       })
     }
     case InputBlockType.CHOICE: {
-      if (input.options.isMultipleChoice)
+      if (
+        input.options?.isMultipleChoice ??
+        defaultChoiceInputOptions.isMultipleChoice
+      )
         return [
           {
             type: 'text',

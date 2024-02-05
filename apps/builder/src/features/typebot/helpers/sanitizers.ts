@@ -1,11 +1,10 @@
+import { forgedBlockSchemas } from '@typebot.io/forge-schemas'
+import { enabledBlocks } from '@typebot.io/forge-repository'
 import prisma from '@typebot.io/lib/prisma'
 import { Plan } from '@typebot.io/prisma'
-import {
-  Block,
-  InputBlockType,
-  IntegrationBlockType,
-  Typebot,
-} from '@typebot.io/schemas'
+import { Block, Typebot } from '@typebot.io/schemas'
+import { IntegrationBlockType } from '@typebot.io/schemas/features/blocks/integrations/constants'
+import { defaultSendEmailOptions } from '@typebot.io/schemas/features/blocks/integrations/sendEmail/constants'
 
 export const sanitizeSettings = (
   settings: Typebot['settings'],
@@ -13,11 +12,17 @@ export const sanitizeSettings = (
   mode: 'create' | 'update'
 ): Typebot['settings'] => ({
   ...settings,
-  general: {
-    ...settings.general,
-    isBrandingEnabled:
-      workspacePlan === Plan.FREE ? true : settings.general.isBrandingEnabled,
-  },
+  publicShare: mode === 'create' ? undefined : settings.publicShare,
+  general:
+    workspacePlan === Plan.FREE || settings.general
+      ? {
+          ...settings.general,
+          isBrandingEnabled:
+            workspacePlan === Plan.FREE
+              ? true
+              : settings.general?.isBrandingEnabled,
+        }
+      : undefined,
   whatsApp: settings.whatsApp
     ? {
         ...settings.whatsApp,
@@ -39,42 +44,36 @@ export const sanitizeGroups =
         ...group,
         blocks: await Promise.all(group.blocks.map(sanitizeBlock(workspaceId))),
       }))
-    )
+    ) as Promise<Typebot['groups']>
 
 const sanitizeBlock =
   (workspaceId: string) =>
   async (block: Block): Promise<Block> => {
+    if (!('options' in block) || !block.options) return block
+
+    if (enabledBlocks.includes(block.type as (typeof enabledBlocks)[number])) {
+      const schema = forgedBlockSchemas.find(
+        (s) => s.shape.type.value === block.type
+      )
+      if (!schema)
+        throw new Error(
+          `Integration block schema not found for block type ${block.type}`
+        )
+      return schema.parse({
+        ...block,
+        options: {
+          ...block.options,
+          credentialsId: await sanitizeCredentialsId(workspaceId)(
+            block.options.credentialsId
+          ),
+        },
+      })
+    }
+
+    if (!('credentialsId' in block.options) || !block.options.credentialsId)
+      return block
+
     switch (block.type) {
-      case InputBlockType.PAYMENT:
-        return {
-          ...block,
-          options: {
-            ...block.options,
-            credentialsId: await sanitizeCredentialsId(workspaceId)(
-              block.options.credentialsId
-            ),
-          },
-        }
-      case IntegrationBlockType.GOOGLE_SHEETS:
-        return {
-          ...block,
-          options: {
-            ...block.options,
-            credentialsId: await sanitizeCredentialsId(workspaceId)(
-              block.options.credentialsId
-            ),
-          },
-        }
-      case IntegrationBlockType.OPEN_AI:
-        return {
-          ...block,
-          options: {
-            ...block.options,
-            credentialsId: await sanitizeCredentialsId(workspaceId)(
-              block.options.credentialsId
-            ),
-          },
-        }
       case IntegrationBlockType.EMAIL:
         return {
           ...block,
@@ -82,12 +81,20 @@ const sanitizeBlock =
             ...block.options,
             credentialsId:
               (await sanitizeCredentialsId(workspaceId)(
-                block.options.credentialsId
-              )) ?? 'default',
+                block.options?.credentialsId
+              )) ?? defaultSendEmailOptions.credentialsId,
           },
         }
       default:
-        return block
+        return {
+          ...block,
+          options: {
+            ...block.options,
+            credentialsId: await sanitizeCredentialsId(workspaceId)(
+              block.options?.credentialsId
+            ),
+          },
+        }
     }
   }
 

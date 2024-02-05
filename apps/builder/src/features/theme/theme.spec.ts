@@ -82,7 +82,9 @@ test.describe.parallel('Theme page', () => {
       await page.click('button:has-text("Chat")')
 
       // Host avatar
-      await expect(page.locator('[data-testid="default-avatar"]')).toBeVisible()
+      await expect(
+        page.locator('[data-testid="default-avatar"]').nth(1)
+      ).toBeVisible()
       await page.click('[data-testid="default-avatar"]')
       await page.click('button:has-text("Link")')
       await page.fill(
@@ -231,7 +233,7 @@ test.describe.parallel('Theme page', () => {
       })
       await page.goto(`/typebots/${typebotId}/theme`)
       await expect(page.getByRole('button', { name: 'Go' })).toBeVisible()
-      await page.getByRole('button', { name: 'Templates New!' }).click()
+      await page.getByRole('button', { name: 'Templates' }).click()
       await page.getByRole('button', { name: 'Save current theme' }).click()
       await page.getByPlaceholder('My template').fill('My awesome theme')
       await page.getByRole('button', { name: 'Save' }).click()
@@ -271,9 +273,7 @@ test.describe('Free workspace', () => {
     await page.goto(`/typebots/${typebotId}/theme`)
     await expect(page.locator('text="What\'s your name?"')).toBeVisible()
     await page.getByRole('button', { name: 'Global' }).click()
-    await expect(
-      page.locator('[data-testid="starter-lock-tag"]')
-    ).toBeVisible()
+    await expect(page.locator('[data-testid="starter-lock-tag"]')).toBeVisible()
     await page.click('text=Show Typebot brand')
     await expect(
       page.locator(

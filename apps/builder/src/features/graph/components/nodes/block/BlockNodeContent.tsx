@@ -1,18 +1,8 @@
-import { Text } from '@chakra-ui/react'
-import {
-  Block,
-  StartBlock,
-  BubbleBlockType,
-  InputBlockType,
-  LogicBlockType,
-  IntegrationBlockType,
-  BlockIndices,
-} from '@typebot.io/schemas'
+import { BlockIndices, BlockV6 } from '@typebot.io/schemas'
 import { WaitNodeContent } from '@/features/blocks/logic/wait/components/WaitNodeContent'
 import { ScriptNodeContent } from '@/features/blocks/logic/script/components/ScriptNodeContent'
 import { ButtonsBlockNode } from '@/features/blocks/inputs/buttons/components/ButtonsBlockNode'
 import { JumpNodeBody } from '@/features/blocks/logic/jump/components/JumpNodeBody'
-import { OpenAINodeBody } from '@/features/blocks/integrations/openai/components/OpenAINodeBody'
 import { AudioBubbleNode } from '@/features/blocks/bubbles/audio/components/AudioBubbleNode'
 import { EmbedBubbleContent } from '@/features/blocks/bubbles/embed/components/EmbedBubbleContent'
 import { ImageBubbleContent } from '@/features/blocks/bubbles/image/components/ImageBubbleContent'
@@ -42,15 +32,24 @@ import { ChatwootNodeBody } from '@/features/blocks/integrations/chatwoot/compon
 import { AbTestNodeBody } from '@/features/blocks/logic/abTest/components/AbTestNodeBody'
 import { PictureChoiceNode } from '@/features/blocks/inputs/pictureChoice/components/PictureChoiceNode'
 import { PixelNodeBody } from '@/features/blocks/integrations/pixel/components/PixelNodeBody'
-import { useTranslate } from '@tolgee/react'
 import { ZemanticAiNodeBody } from '@/features/blocks/integrations/zemanticAi/ZemanticAiNodeBody'
+import { BubbleBlockType } from '@typebot.io/schemas/features/blocks/bubbles/constants'
+import { InputBlockType } from '@typebot.io/schemas/features/blocks/inputs/constants'
+import { LogicBlockType } from '@typebot.io/schemas/features/blocks/logic/constants'
+import { IntegrationBlockType } from '@typebot.io/schemas/features/blocks/integrations/constants'
+import { ForgedBlockNodeContent } from '@/features/forge/components/ForgedBlockNodeContent'
+import { OpenAINodeBody } from '@/features/blocks/integrations/openai/components/OpenAINodeBody'
 
 type Props = {
-  block: Block | StartBlock
+  block: BlockV6
+  groupId: string
   indices: BlockIndices
 }
-export const BlockNodeContent = ({ block, indices }: Props): JSX.Element => {
-  const { t } = useTranslate()
+export const BlockNodeContent = ({
+  block,
+  indices,
+  groupId,
+}: Props): JSX.Element => {
   switch (block.type) {
     case BubbleBlockType.TEXT: {
       return <TextBubbleContent block={block} />
@@ -65,40 +64,19 @@ export const BlockNodeContent = ({ block, indices }: Props): JSX.Element => {
       return <EmbedBubbleContent block={block} />
     }
     case BubbleBlockType.AUDIO: {
-      return <AudioBubbleNode url={block.content.url} />
+      return <AudioBubbleNode url={block.content?.url} />
     }
     case InputBlockType.TEXT: {
-      return (
-        <TextInputNodeContent
-          variableId={block.options.variableId}
-          placeholder={block.options.labels.placeholder}
-          isLong={block.options.isLong}
-        />
-      )
+      return <TextInputNodeContent options={block.options} />
     }
     case InputBlockType.NUMBER: {
-      return (
-        <NumberNodeContent
-          placeholder={block.options.labels.placeholder}
-          variableId={block.options.variableId}
-        />
-      )
+      return <NumberNodeContent options={block.options} />
     }
     case InputBlockType.EMAIL: {
-      return (
-        <EmailInputNodeContent
-          placeholder={block.options.labels.placeholder}
-          variableId={block.options.variableId}
-        />
-      )
+      return <EmailInputNodeContent options={block.options} />
     }
     case InputBlockType.URL: {
-      return (
-        <UrlNodeContent
-          placeholder={block.options.labels.placeholder}
-          variableId={block.options.variableId}
-        />
-      )
+      return <UrlNodeContent options={block.options} />
     }
     case InputBlockType.CHOICE: {
       return <ButtonsBlockNode block={block} indices={indices} />
@@ -107,26 +85,16 @@ export const BlockNodeContent = ({ block, indices }: Props): JSX.Element => {
       return <PictureChoiceNode block={block} indices={indices} />
     }
     case InputBlockType.PHONE: {
-      return (
-        <PhoneNodeContent
-          placeholder={block.options.labels.placeholder}
-          variableId={block.options.variableId}
-        />
-      )
+      return <PhoneNodeContent options={block.options} />
     }
     case InputBlockType.DATE: {
-      return <DateNodeContent variableId={block.options.variableId} />
+      return <DateNodeContent variableId={block.options?.variableId} />
     }
     case InputBlockType.PAYMENT: {
       return <PaymentInputContent block={block} />
     }
     case InputBlockType.RATING: {
-      return (
-        <RatingInputContent
-          block={block}
-          variableId={block.options.variableId}
-        />
-      )
+      return <RatingInputContent block={block} />
     }
     case InputBlockType.FILE: {
       return <FileInputContent options={block.options} />
@@ -135,15 +103,10 @@ export const BlockNodeContent = ({ block, indices }: Props): JSX.Element => {
       return <SetVariableContent block={block} />
     }
     case LogicBlockType.REDIRECT: {
-      return <RedirectNodeContent url={block.options.url} />
+      return <RedirectNodeContent url={block.options?.url} />
     }
     case LogicBlockType.SCRIPT: {
-      return (
-        <ScriptNodeContent
-          name={block.options.name}
-          content={block.options.content}
-        />
-      )
+      return <ScriptNodeContent options={block.options} />
     }
     case LogicBlockType.WAIT: {
       return <WaitNodeContent options={block.options} />
@@ -152,7 +115,7 @@ export const BlockNodeContent = ({ block, indices }: Props): JSX.Element => {
       return <JumpNodeBody options={block.options} />
     }
     case LogicBlockType.AB_TEST: {
-      return <AbTestNodeBody block={block} />
+      return <AbTestNodeBody block={block} groupId={groupId} />
     }
     case LogicBlockType.TYPEBOT_LINK:
       return <TypebotLinkNode block={block} />
@@ -183,16 +146,7 @@ export const BlockNodeContent = ({ block, indices }: Props): JSX.Element => {
       return <ChatwootNodeBody block={block} />
     }
     case IntegrationBlockType.OPEN_AI: {
-      return (
-        <OpenAINodeBody
-          task={block.options.task}
-          responseMapping={
-            'responseMapping' in block.options
-              ? block.options.responseMapping
-              : []
-          }
-        />
-      )
+      return <OpenAINodeBody options={block.options} />
     }
     case IntegrationBlockType.PIXEL: {
       return <PixelNodeBody options={block.options} />
@@ -200,8 +154,8 @@ export const BlockNodeContent = ({ block, indices }: Props): JSX.Element => {
     case IntegrationBlockType.ZEMANTIC_AI: {
       return <ZemanticAiNodeBody options={block.options} />
     }
-    case 'start': {
-      return <Text>{t('editor.blocks.start.text')}</Text>
+    default: {
+      return <ForgedBlockNodeContent block={block} />
     }
   }
 }

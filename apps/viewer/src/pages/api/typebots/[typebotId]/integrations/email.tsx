@@ -1,13 +1,13 @@
 import {
   PublicTypebot,
   ResultValues,
-  SendEmailOptions,
+  SendEmailBlock,
   SmtpCredentials,
 } from '@typebot.io/schemas'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { createTransport, getTestMessageUrl } from 'nodemailer'
 import { isDefined, isEmpty, isNotDefined, omit } from '@typebot.io/lib'
-import { parseAnswers } from '@typebot.io/lib/results'
+import { parseAnswers } from '@typebot.io/lib/results/parseAnswers'
 import { methodNotAllowed, initMiddleware } from '@typebot.io/lib/api'
 import { decrypt } from '@typebot.io/lib/api/encryption/decrypt'
 
@@ -56,11 +56,14 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
       fileUrls,
     } = (
       typeof req.body === 'string' ? JSON.parse(req.body) : req.body
-    ) as SendEmailOptions & {
+    ) as SendEmailBlock['options'] & {
       resultValues: ResultValues
       fileUrls?: string
     }
     const { name: replyToName } = parseEmailRecipient(replyTo)
+
+    if (!credentialsId)
+      return res.status(404).send({ message: "Couldn't find credentials" })
 
     const { host, port, isTlsEnabled, username, password, from } =
       (await getEmailInfo(credentialsId)) ?? {}
@@ -186,9 +189,10 @@ const getEmailBody = async ({
 }: {
   typebotId: string
   resultValues: ResultValues
-} & Pick<SendEmailOptions, 'isCustomBody' | 'isBodyCode' | 'body'>): Promise<
-  { html?: string; text?: string } | undefined
-> => {
+} & Pick<
+  NonNullable<SendEmailBlock['options']>,
+  'isCustomBody' | 'isBodyCode' | 'body'
+>): Promise<{ html?: string; text?: string } | undefined> => {
   if (isCustomBody || (isNotDefined(isCustomBody) && !isEmpty(body)))
     return {
       html: isBodyCode ? body : undefined,

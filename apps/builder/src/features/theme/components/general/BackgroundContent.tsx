@@ -11,21 +11,25 @@ import {
   Portal,
 } from '@chakra-ui/react'
 import { isNotEmpty } from '@typebot.io/lib'
-import { Background, BackgroundType } from '@typebot.io/schemas'
+import { Background } from '@typebot.io/schemas'
 import React from 'react'
 import { ColorPicker } from '../../../../components/ColorPicker'
+import {
+  BackgroundType,
+  defaultTheme,
+} from '@typebot.io/schemas/features/typebot/theme/constants'
+import { useTranslate } from '@tolgee/react'
 
 type BackgroundContentProps = {
   background?: Background
   onBackgroundContentChange: (content: string) => void
 }
 
-const defaultBackgroundColor = '#ffffff'
-
 export const BackgroundContent = ({
   background,
   onBackgroundContentChange,
 }: BackgroundContentProps) => {
+  const { t } = useTranslate()
   const { typebot } = useTypebot()
   const handleContentChange = (content: string) =>
     onBackgroundContentChange(content)
@@ -34,9 +38,11 @@ export const BackgroundContent = ({
     case BackgroundType.COLOR:
       return (
         <Flex justify="space-between" align="center">
-          <Text>Background color:</Text>
+          <Text>{t('theme.sideMenu.global.background.color')}</Text>
           <ColorPicker
-            value={background.content ?? defaultBackgroundColor}
+            value={
+              background.content ?? defaultTheme.general.background.content
+            }
             onColorChange={handleContentChange}
           />
         </Flex>
@@ -49,7 +55,7 @@ export const BackgroundContent = ({
             {isNotEmpty(background.content) ? (
               <Image
                 src={background.content}
-                alt="Background image"
+                alt={t('theme.sideMenu.global.background.image.alt')}
                 cursor="pointer"
                 _hover={{ filter: 'brightness(.9)' }}
                 transition="filter 200ms"
@@ -58,7 +64,9 @@ export const BackgroundContent = ({
                 objectFit="cover"
               />
             ) : (
-              <Button>Select an image</Button>
+              <Button>
+                {t('theme.sideMenu.global.background.image.button')}
+              </Button>
             )}
           </PopoverTrigger>
           <Portal>

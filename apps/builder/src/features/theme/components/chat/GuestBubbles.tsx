@@ -2,32 +2,40 @@ import { Stack, Flex, Text } from '@chakra-ui/react'
 import { ContainerColors } from '@typebot.io/schemas'
 import React from 'react'
 import { ColorPicker } from '../../../../components/ColorPicker'
+import { defaultTheme } from '@typebot.io/schemas/features/typebot/theme/constants'
+import { useTranslate } from '@tolgee/react'
 
 type Props = {
-  guestBubbles: ContainerColors
-  onGuestBubblesChange: (hostBubbles: ContainerColors) => void
+  guestBubbles: ContainerColors | undefined
+  onGuestBubblesChange: (hostBubbles: ContainerColors | undefined) => void
 }
 
 export const GuestBubbles = ({ guestBubbles, onGuestBubblesChange }: Props) => {
-  const handleBackgroundChange = (backgroundColor: string) =>
+  const { t } = useTranslate()
+
+  const updateBackground = (backgroundColor: string) =>
     onGuestBubblesChange({ ...guestBubbles, backgroundColor })
-  const handleTextChange = (color: string) =>
+
+  const updateText = (color: string) =>
     onGuestBubblesChange({ ...guestBubbles, color })
 
   return (
     <Stack data-testid="guest-bubbles-theme">
       <Flex justify="space-between" align="center">
-        <Text>Background:</Text>
+        <Text>{t('theme.sideMenu.chat.theme.background')}</Text>
         <ColorPicker
-          value={guestBubbles.backgroundColor}
-          onColorChange={handleBackgroundChange}
+          value={
+            guestBubbles?.backgroundColor ??
+            defaultTheme.chat.guestBubbles.backgroundColor
+          }
+          onColorChange={updateBackground}
         />
       </Flex>
       <Flex justify="space-between" align="center">
-        <Text>Text:</Text>
+        <Text>{t('theme.sideMenu.chat.theme.text')}</Text>
         <ColorPicker
-          value={guestBubbles.color}
-          onColorChange={handleTextChange}
+          value={guestBubbles?.color ?? defaultTheme.chat.guestBubbles.color}
+          onColorChange={updateText}
         />
       </Flex>
     </Stack>

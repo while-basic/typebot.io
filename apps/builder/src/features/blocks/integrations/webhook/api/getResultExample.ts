@@ -5,13 +5,14 @@ import { TRPCError } from '@trpc/server'
 import { Typebot } from '@typebot.io/schemas'
 import { z } from 'zod'
 import { fetchLinkedTypebots } from '@/features/blocks/logic/typebotLink/helpers/fetchLinkedTypebots'
-import { parseResultExample } from '../helpers/parseResultExample'
+import { parseSampleResult } from '@typebot.io/bot-engine/blocks/integrations/webhook/parseSampleResult'
+import { getBlockById } from '@typebot.io/lib/getBlockById'
 
 export const getResultExample = authenticatedProcedure
   .meta({
     openapi: {
       method: 'GET',
-      path: '/typebots/{typebotId}/webhookBlocks/{blockId}/getResultExample',
+      path: '/v1/typebots/{typebotId}/webhookBlocks/{blockId}/getResultExample',
       protect: true,
       summary: 'Get result example',
       description:
@@ -27,15 +28,7 @@ export const getResultExample = authenticatedProcedure
   )
   .output(
     z.object({
-      resultExample: z
-        .object({
-          message: z.literal(
-            'This is a sample result, it has been generated ⬇️'
-          ),
-          'Submitted at': z.string(),
-        })
-        .and(z.record(z.string().optional()))
-        .describe('Can contain any fields.'),
+      resultExample: z.record(z.any()).describe('Can contain any fields.'),
     })
   )
   .query(async ({ input: { typebotId, blockId }, ctx: { user } }) => {
@@ -45,26 +38,24 @@ export const getResultExample = authenticatedProcedure
         groups: true,
         edges: true,
         variables: true,
+        events: true,
       },
-    })) as Pick<Typebot, 'groups' | 'edges' | 'variables'> | null
+    })) as Pick<Typebot, 'groups' | 'edges' | 'variables' | 'events'> | null
 
     if (!typebot)
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Typebot not found' })
 
-    const block = typebot.groups
-      .flatMap((group) => group.blocks)
-      .find((block) => block.id === blockId)
+    const { group } = getBlockById(blockId, typebot.groups)
 
-    if (!block)
+    if (!group)
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Block not found' })
 
     const linkedTypebots = await fetchLinkedTypebots(typebot, user)
 
     return {
-      resultExample: await parseResultExample({
-        typebot,
-        linkedTypebots,
-        userEmail: user.email ?? 'test@email.com',
-      })(block.groupId),
+      resultExample: await parseSampleResult(typebot, linkedTypebots)(
+        group.id,
+        typebot.variables
+      ),
     }
   })

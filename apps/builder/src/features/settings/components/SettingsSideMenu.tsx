@@ -8,29 +8,43 @@ import {
   HStack,
   Stack,
 } from '@chakra-ui/react'
-import { ChatIcon, CodeIcon, MoreVerticalIcon } from '@/components/icons'
-import { GeneralSettings, Metadata, TypingEmulation } from '@typebot.io/schemas'
+import {
+  ChatIcon,
+  CodeIcon,
+  LockedIcon,
+  MoreVerticalIcon,
+} from '@/components/icons'
+import { Settings } from '@typebot.io/schemas'
 import React from 'react'
 import { GeneralSettingsForm } from './GeneralSettingsForm'
 import { MetadataForm } from './MetadataForm'
 import { TypingEmulationForm } from './TypingEmulationForm'
 import { useTypebot } from '@/features/editor/providers/TypebotProvider'
 import { headerHeight } from '@/features/editor/constants'
+import { SecurityForm } from './SecurityForm'
 
 export const SettingsSideMenu = () => {
   const { typebot, updateTypebot } = useTypebot()
 
-  const handleTypingEmulationChange = (typingEmulation: TypingEmulation) =>
+  const updateTypingEmulation = (
+    typingEmulation: Settings['typingEmulation']
+  ) =>
     typebot &&
     updateTypebot({
       updates: { settings: { ...typebot.settings, typingEmulation } },
     })
 
-  const handleGeneralSettingsChange = (general: GeneralSettings) =>
+  const updateSecurity = (security: Settings['security']) =>
+    typebot &&
+    updateTypebot({
+      updates: { settings: { ...typebot.settings, security } },
+    })
+
+  const handleGeneralSettingsChange = (general: Settings['general']) =>
     typebot &&
     updateTypebot({ updates: { settings: { ...typebot.settings, general } } })
 
-  const handleMetadataChange = (metadata: Metadata) =>
+  const handleMetadataChange = (metadata: Settings['metadata']) =>
     typebot &&
     updateTypebot({ updates: { settings: { ...typebot.settings, metadata } } })
 
@@ -42,7 +56,7 @@ export const SettingsSideMenu = () => {
       borderRightWidth={1}
       pt={10}
       spacing={10}
-      overflowY="scroll"
+      overflowY="auto"
       pb="20"
     >
       <Heading fontSize="xl" textAlign="center">
@@ -70,7 +84,7 @@ export const SettingsSideMenu = () => {
           <AccordionButton py={6}>
             <HStack flex="1" pl={2}>
               <ChatIcon />
-              <Heading fontSize="lg">Typing emulation</Heading>
+              <Heading fontSize="lg">Typing</Heading>
             </HStack>
             <AccordionIcon />
           </AccordionButton>
@@ -78,7 +92,24 @@ export const SettingsSideMenu = () => {
             {typebot && (
               <TypingEmulationForm
                 typingEmulation={typebot.settings.typingEmulation}
-                onUpdate={handleTypingEmulationChange}
+                onUpdate={updateTypingEmulation}
+              />
+            )}
+          </AccordionPanel>
+        </AccordionItem>
+        <AccordionItem>
+          <AccordionButton py={6}>
+            <HStack flex="1" pl={2}>
+              <LockedIcon />
+              <Heading fontSize="lg">Security</Heading>
+            </HStack>
+            <AccordionIcon />
+          </AccordionButton>
+          <AccordionPanel pb={4} px="6">
+            {typebot && (
+              <SecurityForm
+                security={typebot.settings.security}
+                onUpdate={updateSecurity}
               />
             )}
           </AccordionPanel>

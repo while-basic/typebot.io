@@ -1,5 +1,4 @@
 import prisma from '@typebot.io/lib/prisma'
-import { getDefinedVariables } from '@typebot.io/lib/results'
 import { TypebotInSession } from '@typebot.io/schemas'
 
 type Props = {
@@ -8,6 +7,7 @@ type Props = {
   hasStarted: boolean
   isCompleted: boolean
 }
+
 export const createResultIfNotExist = async ({
   resultId,
   typebot,
@@ -26,7 +26,7 @@ export const createResultIfNotExist = async ({
         typebotId: typebot.id,
         isCompleted: isCompleted ? true : false,
         hasStarted,
-        variables: getDefinedVariables(typebot.variables),
+        variables: typebot.variables,
       },
     ],
   })

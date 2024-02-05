@@ -2,7 +2,7 @@ import prisma from '@typebot.io/lib/prisma'
 import { authenticatedProcedure } from '@/helpers/server/trpc'
 import { TRPCError } from '@trpc/server'
 import { WorkspaceRole } from '@typebot.io/prisma'
-import { PublicTypebot, Typebot, typebotSchema } from '@typebot.io/schemas'
+import { PublicTypebot, Typebot, typebotV5Schema } from '@typebot.io/schemas'
 import { omit } from '@typebot.io/lib'
 import { z } from 'zod'
 import { getUserRoleInWorkspace } from '@/features/workspace/helpers/getUserRoleInWorkspace'
@@ -11,17 +11,26 @@ export const listTypebots = authenticatedProcedure
   .meta({
     openapi: {
       method: 'GET',
-      path: '/typebots',
+      path: '/v1/typebots',
       protect: true,
       summary: 'List typebots',
       tags: ['Typebot'],
     },
   })
-  .input(z.object({ workspaceId: z.string(), folderId: z.string().optional() }))
+  .input(
+    z.object({
+      workspaceId: z
+        .string()
+        .describe(
+          '[Where to find my workspace ID?](../how-to#how-to-find-my-workspaceid)'
+        ),
+      folderId: z.string().optional(),
+    })
+  )
   .output(
     z.object({
       typebots: z.array(
-        typebotSchema._def.schema
+        typebotV5Schema._def.schema
           .pick({
             name: true,
             icon: true,

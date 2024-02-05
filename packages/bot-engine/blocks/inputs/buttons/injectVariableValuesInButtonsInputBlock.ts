@@ -2,31 +2,29 @@ import {
   SessionState,
   VariableWithValue,
   ChoiceInputBlock,
-  ItemType,
 } from '@typebot.io/schemas'
 import { isDefined } from '@typebot.io/lib'
 import { filterChoiceItems } from './filterChoiceItems'
-import { deepParseVariables } from '../../../variables/deepParseVariables'
-import { transformStringVariablesToList } from '../../../variables/transformVariablesToList'
-import { updateVariablesInSession } from '../../../variables/updateVariablesInSession'
+import { deepParseVariables } from '@typebot.io/variables/deepParseVariables'
+import { transformVariablesToList } from '@typebot.io/variables/transformVariablesToList'
+import { updateVariablesInSession } from '@typebot.io/variables/updateVariablesInSession'
 
 export const injectVariableValuesInButtonsInputBlock =
   (state: SessionState) =>
   (block: ChoiceInputBlock): ChoiceInputBlock => {
     const { variables } = state.typebotsQueue[0].typebot
-    if (block.options.dynamicVariableId) {
+    if (block.options?.dynamicVariableId) {
       const variable = variables.find(
         (variable) =>
-          variable.id === block.options.dynamicVariableId &&
+          variable.id === block.options?.dynamicVariableId &&
           isDefined(variable.value)
       ) as VariableWithValue | undefined
       if (!variable) return block
       const value = getVariableValue(state)(variable)
       return {
-        ...block,
+        ...deepParseVariables(variables)(block),
         items: value.filter(isDefined).map((item, idx) => ({
           id: idx.toString(),
-          type: ItemType.BUTTON,
           blockId: block.id,
           content: item,
         })),
@@ -40,7 +38,7 @@ const getVariableValue =
   (variable: VariableWithValue): (string | null)[] => {
     if (!Array.isArray(variable.value)) {
       const { variables } = state.typebotsQueue[0].typebot
-      const [transformedVariable] = transformStringVariablesToList(variables)([
+      const [transformedVariable] = transformVariablesToList(variables)([
         variable.id,
       ])
       updateVariablesInSession(state)([transformedVariable])

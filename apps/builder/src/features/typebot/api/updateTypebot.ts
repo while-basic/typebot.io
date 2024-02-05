@@ -1,7 +1,11 @@
 import prisma from '@typebot.io/lib/prisma'
 import { authenticatedProcedure } from '@/helpers/server/trpc'
 import { TRPCError } from '@trpc/server'
-import { typebotCreateSchema, typebotSchema } from '@typebot.io/schemas'
+import {
+  typebotSchema,
+  typebotV5Schema,
+  typebotV6Schema,
+} from '@typebot.io/schemas'
 import { z } from 'zod'
 import {
   isCustomDomainNotAvailable,
@@ -13,12 +17,33 @@ import { isWriteTypebotForbidden } from '../helpers/isWriteTypebotForbidden'
 import { isCloudProdInstance } from '@/helpers/isCloudProdInstance'
 import { Prisma } from '@typebot.io/prisma'
 import { hasProPerks } from '@/features/billing/helpers/hasProPerks'
+import { migrateTypebot } from '@typebot.io/lib/migrations/migrateTypebot'
+
+const typebotUpdateSchemaPick = {
+  version: true,
+  name: true,
+  icon: true,
+  selectedThemeTemplateId: true,
+  groups: true,
+  theme: true,
+  settings: true,
+  folderId: true,
+  variables: true,
+  edges: true,
+  resultsTablePreferences: true,
+  publicId: true,
+  customDomain: true,
+  isClosed: true,
+  whatsAppCredentialsId: true,
+  riskLevel: true,
+  events: true,
+} as const
 
 export const updateTypebot = authenticatedProcedure
   .meta({
     openapi: {
       method: 'PATCH',
-      path: '/typebots/{typebotId}',
+      path: '/v1/typebots/{typebotId}',
       protect: true,
       summary: 'Update a typebot',
       tags: ['Typebot'],
@@ -26,15 +51,22 @@ export const updateTypebot = authenticatedProcedure
   })
   .input(
     z.object({
-      typebotId: z.string(),
-      typebot: typebotCreateSchema.merge(
-        typebotSchema._def.schema
-          .pick({
-            isClosed: true,
-            whatsAppCredentialsId: true,
-          })
+      typebotId: z
+        .string()
+        .describe(
+          "[Where to find my bot's ID?](../how-to#how-to-find-my-typebotid)"
+        ),
+      typebot: z.union([
+        typebotV6Schema.pick(typebotUpdateSchemaPick).partial().openapi({
+          title: 'Typebot V6',
+        }),
+        typebotV5Schema._def.schema
+          .pick(typebotUpdateSchemaPick)
           .partial()
-      ),
+          .openapi({
+            title: 'Typebot V5',
+          }),
+      ]),
       updatedAt: z
         .date()
         .optional()
@@ -45,7 +77,7 @@ export const updateTypebot = authenticatedProcedure
   )
   .output(
     z.object({
-      typebot: typebotSchema,
+      typebot: typebotV6Schema,
     })
   )
   .mutation(
@@ -55,10 +87,10 @@ export const updateTypebot = authenticatedProcedure
           id: typebotId,
         },
         select: {
+          version: true,
           id: true,
           customDomain: true,
           publicId: true,
-          workspaceId: true,
           collaborators: {
             select: {
               userId: true,
@@ -67,7 +99,16 @@ export const updateTypebot = authenticatedProcedure
           },
           workspace: {
             select: {
+              id: true,
               plan: true,
+              isSuspended: true,
+              isPastDue: true,
+              members: {
+                select: {
+                  userId: true,
+                  role: true,
+                },
+              },
             },
           },
           updatedAt: true,
@@ -133,12 +174,13 @@ export const updateTypebot = authenticatedProcedure
           id: existingTypebot.id,
         },
         data: {
-          version: '5',
+          version: typebot.version ?? undefined,
           name: typebot.name,
           icon: typebot.icon,
           selectedThemeTemplateId: typebot.selectedThemeTemplateId,
+          events: typebot.events ?? undefined,
           groups: typebot.groups
-            ? await sanitizeGroups(existingTypebot.workspaceId)(typebot.groups)
+            ? await sanitizeGroups(existingTypebot.workspace.id)(typebot.groups)
             : undefined,
           theme: typebot.theme ? typebot.theme : undefined,
           settings: typebot.settings
@@ -168,7 +210,11 @@ export const updateTypebot = authenticatedProcedure
         },
       })
 
-      return { typebot: typebotSchema.parse(newTypebot) }
+      const migratedTypebot = await migrateTypebot(
+        typebotSchema.parse(newTypebot)
+      )
+
+      return { typebot: migratedTypebot }
     }
   )
 

@@ -31,7 +31,7 @@ import { useParentModal } from '@/features/graph/providers/ParentModalProvider'
 import { trpc } from '@/lib/trpc'
 import { SwitchWithLabel } from '@/components/inputs/SwitchWithLabel'
 import { TableList } from '@/components/TableList'
-import { Comparison, LogicalOperator } from '@typebot.io/schemas'
+import { Comparison } from '@typebot.io/schemas'
 import { DropdownList } from '@/components/DropdownList'
 import { WhatsAppComparisonItem } from './WhatsAppComparisonItem'
 import { AlertInfo } from '@/components/AlertInfo'
@@ -42,6 +42,7 @@ import { isDefined } from '@typebot.io/lib/utils'
 import { hasProPerks } from '@/features/billing/helpers/hasProPerks'
 import { UnlockPlanAlertInfo } from '@/components/UnlockPlanAlertInfo'
 import { PlanTag } from '@/features/billing/components/PlanTag'
+import { LogicalOperator } from '@typebot.io/schemas/features/blocks/logic/condition/constants'
 
 export const WhatsAppModal = ({ isOpen, onClose }: ModalProps): JSX.Element => {
   const { typebot, updateTypebot, isPublished } = useTypebot()
@@ -55,14 +56,15 @@ export const WhatsAppModal = ({ isOpen, onClose }: ModalProps): JSX.Element => {
 
   const whatsAppSettings = typebot?.settings.whatsApp
 
-  const { data: phoneNumberData } = trpc.whatsApp.getPhoneNumber.useQuery(
-    {
-      credentialsId: typebot?.whatsAppCredentialsId as string,
-    },
-    {
-      enabled: !!typebot?.whatsAppCredentialsId,
-    }
-  )
+  const { data: phoneNumberData } =
+    trpc.whatsAppInternal.getPhoneNumber.useQuery(
+      {
+        credentialsId: typebot?.whatsAppCredentialsId as string,
+      },
+      {
+        enabled: !!typebot?.whatsAppCredentialsId,
+      }
+    )
 
   const toggleEnableWhatsApp = (isChecked: boolean) => {
     if (!phoneNumberData?.id || !typebot) return
@@ -252,7 +254,6 @@ export const WhatsAppModal = ({ isOpen, onClose }: ModalProps): JSX.Element => {
                               []
                             }
                             onItemsChange={updateStartConditionComparisons}
-                            Item={WhatsAppComparisonItem}
                             ComponentBetweenItems={() => (
                               <Flex justify="center">
                                 <DropdownList
@@ -269,7 +270,9 @@ export const WhatsAppModal = ({ isOpen, onClose }: ModalProps): JSX.Element => {
                               </Flex>
                             )}
                             addLabel="Add a comparison"
-                          />
+                          >
+                            {(props) => <WhatsAppComparisonItem {...props} />}
+                          </TableList>
                         </SwitchWithRelatedSettings>
                       </AccordionPanel>
                     </AccordionItem>

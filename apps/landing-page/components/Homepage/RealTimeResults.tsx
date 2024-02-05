@@ -85,12 +85,12 @@ export const RealTimeResults = () => {
           w="full"
           direction={['column', 'row']}
           spacing="4"
+          pos="relative"
           data-aos="fade"
         >
           {typebot && (
             <Standard
               typebot="airtable-real-time"
-              apiHost="https://typebot.io"
               onAnswer={handleAnswer}
               style={{
                 borderRadius: '0.375rem',

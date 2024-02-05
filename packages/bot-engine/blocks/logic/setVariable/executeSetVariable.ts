@@ -2,9 +2,9 @@ import { SessionState, SetVariableBlock, Variable } from '@typebot.io/schemas'
 import { byId } from '@typebot.io/lib'
 import { ExecuteLogicResponse } from '../../../types'
 import { parseScriptToExecuteClientSideAction } from '../script/executeScript'
-import { parseGuessedValueType } from '../../../variables/parseGuessedValueType'
-import { parseVariables } from '../../../variables/parseVariables'
-import { updateVariablesInSession } from '../../../variables/updateVariablesInSession'
+import { parseGuessedValueType } from '@typebot.io/variables/parseGuessedValueType'
+import { parseVariables } from '@typebot.io/variables/parseVariables'
+import { updateVariablesInSession } from '@typebot.io/variables/updateVariablesInSession'
 import { createId } from '@paralleldrive/cuid2'
 
 export const executeSetVariable = (
@@ -32,6 +32,7 @@ export const executeSetVariable = (
       outgoingEdgeId: block.outgoingEdgeId,
       clientSideActions: [
         {
+          type: 'setVariable',
           setVariable: {
             scriptToExecute,
           },
@@ -62,6 +63,8 @@ const evaluateSetVariableExpression =
     const isSingleVariable =
       str.startsWith('{{') && str.endsWith('}}') && str.split('{{').length === 2
     if (isSingleVariable) return parseVariables(variables)(str)
+    // To avoid octal number evaluation
+    if (!isNaN(str as unknown as number) && /0[^.].+/.test(str)) return str
     const evaluating = parseVariables(variables, { fieldToParse: 'id' })(
       str.includes('return ') ? str : `return ${str}`
     )
@@ -76,7 +79,7 @@ const evaluateSetVariableExpression =
 const getExpressionToEvaluate =
   (state: SessionState) =>
   (options: SetVariableBlock['options']): string | null => {
-    switch (options.type) {
+    switch (options?.type) {
       case 'Contact name':
         return state.whatsApp?.contact.name ?? null
       case 'Phone number': {
@@ -102,6 +105,12 @@ const getExpressionToEvaluate =
         return `const itemIndex = ${options.mapListItemParams?.baseListVariableId}.indexOf(${options.mapListItemParams?.baseItemVariableId})
       return ${options.mapListItemParams?.targetListVariableId}.at(itemIndex)`
       }
+      case 'Append value(s)': {
+        return `if(!${options.item}) return ${options.variableId};
+        if(!${options.variableId}) return [${options.item}];
+        if(!Array.isArray(${options.variableId})) return [${options.variableId}, ${options.item}];
+        return (${options.variableId}).concat(${options.item});`
+      }
       case 'Empty': {
         return null
       }
@@ -117,7 +126,7 @@ const getExpressionToEvaluate =
       }
       case 'Custom':
       case undefined: {
-        return options.expressionToEvaluate ?? null
+        return options?.expressionToEvaluate ?? null
       }
     }
   }

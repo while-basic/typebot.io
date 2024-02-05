@@ -10,11 +10,10 @@ import React, { useEffect, useRef, useState } from 'react'
 import {
   BubbleBlock,
   BubbleBlockContent,
-  DraggableBlock,
   Block,
   BlockWithOptions,
   TextBubbleBlock,
-  LogicBlockType,
+  BlockV6,
 } from '@typebot.io/schemas'
 import {
   isBubbleBlock,
@@ -25,7 +24,7 @@ import {
 import { BlockNodeContent } from './BlockNodeContent'
 import { BlockSettings, SettingsPopoverContent } from './SettingsPopoverContent'
 import { BlockNodeContextMenu } from './BlockNodeContextMenu'
-import { SourceEndpoint } from '../../endpoints/SourceEndpoint'
+import { BlockSourceEndpoint } from '../../endpoints/BlockSourceEndpoint'
 import { useRouter } from 'next/router'
 import { MediaBubblePopoverContent } from './MediaBubblePopoverContent'
 import { ContextMenu } from '@/components/ContextMenu'
@@ -44,6 +43,8 @@ import { setMultipleRefs } from '@/helpers/setMultipleRefs'
 import { TargetEndpoint } from '../../endpoints/TargetEndpoint'
 import { SettingsModal } from './SettingsModal'
 import { TElement } from '@udecode/plate-common'
+import { LogicBlockType } from '@typebot.io/schemas/features/blocks/logic/constants'
+import { useGroupsStore } from '@/features/graph/hooks/useGroupsStore'
 
 export const BlockNode = ({
   block,
@@ -51,16 +52,15 @@ export const BlockNode = ({
   indices,
   onMouseDown,
 }: {
-  block: Block
+  block: BlockV6
   isConnectable: boolean
   indices: { blockIndex: number; groupIndex: number }
-  onMouseDown?: (blockNodePosition: NodePosition, block: DraggableBlock) => void
+  onMouseDown?: (blockNodePosition: NodePosition, block: BlockV6) => void
 }) => {
   const bg = useColorModeValue('gray.50', 'gray.850')
   const previewingBorderColor = useColorModeValue('blue.400', 'blue.300')
   const borderColor = useColorModeValue('gray.200', 'gray.800')
-  const { pathname } = useRouter()
-  const { query } = useRouter()
+  const { pathname, query } = useRouter()
   const {
     setConnectingIds,
     connectingIds,
@@ -69,6 +69,7 @@ export const BlockNode = ({
     setFocusedGroupId,
     previewingEdge,
     isReadOnly,
+    isAnalytics,
     previewingBlock,
   } = useGraph()
   const { mouseOverBlock, setMouseOverBlock } = useBlockDnd()
@@ -78,7 +79,7 @@ export const BlockNode = ({
     openedBlockId === block.id
   )
   const [isEditing, setIsEditing] = useState<boolean>(
-    isTextBubbleBlock(block) && block.content.richText.length === 0
+    isTextBubbleBlock(block) && (block.content?.richText?.length ?? 0) === 0
   )
   const blockRef = useRef<HTMLDivElement | null>(null)
 
@@ -87,15 +88,20 @@ export const BlockNode = ({
     previewingEdge?.to.blockId === block.id ||
     previewingBlock?.id === block.id
 
+  const groupId = typebot?.groups[indices.groupIndex].id
+
+  const isDraggingGraph = useGroupsStore((state) => state.isDraggingGraph)
+
   const onDrag = (position: NodePosition) => {
-    if (block.type === 'start' || !onMouseDown) return
+    if (!onMouseDown) return
     onMouseDown(position, block)
   }
 
   useDragDistance({
     ref: blockRef,
     onDrag,
-    isDisabled: !onMouseDown || block.type === 'start',
+    isDisabled: !onMouseDown,
+    deps: [isEditing],
   })
 
   const {
@@ -110,10 +116,10 @@ export const BlockNode = ({
 
   useEffect(() => {
     setIsConnecting(
-      connectingIds?.target?.groupId === block.groupId &&
+      connectingIds?.target?.groupId === groupId &&
         connectingIds?.target?.blockId === block.id
     )
-  }, [connectingIds, block.groupId, block.id])
+  }, [connectingIds, block.id, groupId])
 
   const handleModalClose = () => {
     updateBlock(indices, { ...block })
@@ -124,10 +130,10 @@ export const BlockNode = ({
     if (isReadOnly) return
     if (mouseOverBlock?.id !== block.id && blockRef.current)
       setMouseOverBlock({ id: block.id, element: blockRef.current })
-    if (connectingIds)
+    if (connectingIds && groupId)
       setConnectingIds({
         ...connectingIds,
-        target: { groupId: block.groupId, blockId: block.id },
+        target: { groupId, blockId: block.id },
       })
   }
 
@@ -147,9 +153,9 @@ export const BlockNode = ({
   }
 
   const handleClick = (e: React.MouseEvent) => {
-    setFocusedGroupId(block.groupId)
+    setFocusedGroupId(groupId)
     e.stopPropagation()
-    if (isTextBubbleBlock(block)) setIsEditing(true)
+    if (isTextBubbleBlock(block) && !isReadOnly) setIsEditing(true)
     setOpenedBlockId(block.id)
   }
 
@@ -187,7 +193,7 @@ export const BlockNode = ({
   return isEditing && isTextBubbleBlock(block) ? (
     <TextBubbleEditor
       id={block.id}
-      initialValue={block.content.richText}
+      initialValue={block.content?.richText ?? []}
       onClose={handleCloseEditor}
     />
   ) : (
@@ -208,9 +214,10 @@ export const BlockNode = ({
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
               onClick={handleClick}
-              data-testid={`block`}
+              data-testid={`block ${block.id}`}
               w="full"
               className="prevent-group-drag"
+              pointerEvents={isAnalytics || isDraggingGraph ? 'none' : 'auto'}
             >
               <HStack
                 flex="1"
@@ -232,30 +239,33 @@ export const BlockNode = ({
                 w="full"
                 transition="border-color 0.2s"
               >
-                <BlockIcon
-                  type={block.type}
-                  mt="1"
-                  data-testid={`${block.id}-icon`}
-                />
-                <BlockNodeContent block={block} indices={indices} />
+                <BlockIcon type={block.type} mt=".25rem" />
+                {typebot?.groups[indices.groupIndex].id && (
+                  <BlockNodeContent
+                    block={block}
+                    indices={indices}
+                    groupId={typebot.groups[indices.groupIndex].id}
+                  />
+                )}
                 {(hasIcomingEdge || isDefined(connectingIds)) && (
                   <TargetEndpoint
                     pos="absolute"
                     left="-34px"
                     top="16px"
                     blockId={block.id}
-                    groupId={block.groupId}
+                    groupId={groupId}
                   />
                 )}
                 {(isConnectable ||
                   (pathname.endsWith('analytics') && isInputBlock(block))) &&
                   hasDefaultConnector(block) &&
+                  groupId &&
                   block.type !== LogicBlockType.JUMP && (
-                    <SourceEndpoint
+                    <BlockSourceEndpoint
                       source={{
-                        groupId: block.groupId,
                         blockId: block.id,
                       }}
+                      groupId={groupId}
                       pos="absolute"
                       right="-34px"
                       bottom="10px"
@@ -269,6 +279,7 @@ export const BlockNode = ({
             <>
               <SettingsPopoverContent
                 block={block}
+                groupId={groupId}
                 onExpandClick={handleExpandClick}
                 onBlockChange={handleBlockUpdate}
               />
@@ -276,6 +287,7 @@ export const BlockNode = ({
                 <SettingsModal isOpen={isModalOpen} onClose={handleModalClose}>
                   <BlockSettings
                     block={block}
+                    groupId={groupId}
                     onBlockChange={handleBlockUpdate}
                   />
                 </SettingsModal>
@@ -299,10 +311,10 @@ export const BlockNode = ({
   )
 }
 
-const hasSettingsPopover = (block: Block): block is BlockWithOptions =>
+const hasSettingsPopover = (block: BlockV6): block is BlockWithOptions =>
   !isBubbleBlock(block) && block.type !== LogicBlockType.CONDITION
 
 const isMediaBubbleBlock = (
-  block: Block
+  block: BlockV6
 ): block is Exclude<BubbleBlock, TextBubbleBlock> =>
   isBubbleBlock(block) && !isTextBubbleBlock(block)

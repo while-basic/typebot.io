@@ -1,19 +1,19 @@
 import { ExecuteIntegrationResponse } from '../../../types'
 import { env } from '@typebot.io/env'
 import { isDefined } from '@typebot.io/lib'
-import {
-  ChatwootBlock,
-  ChatwootOptions,
-  SessionState,
-} from '@typebot.io/schemas'
-import { extractVariablesFromText } from '../../../variables/extractVariablesFromText'
-import { parseGuessedValueType } from '../../../variables/parseGuessedValueType'
-import { parseVariables } from '../../../variables/parseVariables'
+import { ChatwootBlock, SessionState } from '@typebot.io/schemas'
+import { extractVariablesFromText } from '@typebot.io/variables/extractVariablesFromText'
+import { parseGuessedValueType } from '@typebot.io/variables/parseGuessedValueType'
+import { parseVariables } from '@typebot.io/variables/parseVariables'
+import { defaultChatwootOptions } from '@typebot.io/schemas/features/blocks/integrations/chatwoot/constants'
 
-const parseSetUserCode = (user: ChatwootOptions['user'], resultId: string) =>
+const parseSetUserCode = (
+  user: NonNullable<ChatwootBlock['options']>['user'],
+  resultId: string
+) =>
   user?.email || user?.id
     ? `
-window.$chatwoot.setUser(${user?.id ?? `"${resultId}"`}, {
+window.$chatwoot.setUser(${user?.id ?? user.email ?? `"${resultId}"`}, {
   email: ${user?.email ? user.email : 'undefined'},
   name: ${user?.name ? user.name : 'undefined'},
   avatar_url: ${user?.avatarUrl ? user.avatarUrl : 'undefined'},
@@ -27,8 +27,9 @@ const parseChatwootOpenCode = ({
   user,
   resultId,
   typebotId,
-}: ChatwootOptions & { typebotId: string; resultId: string }) => {
+}: ChatwootBlock['options'] & { typebotId: string; resultId: string }) => {
   const openChatwoot = `${parseSetUserCode(user, resultId)}
+  if(window.Typebot?.unmount) window.Typebot.unmount();
   window.$chatwoot.setCustomAttributes({
     typebot_result_url: "${
       env.NEXTAUTH_URL
@@ -45,7 +46,7 @@ const parseChatwootOpenCode = ({
   if (window.$chatwoot) {${openChatwoot}}
   else {
   (function (d, t) {
-    var BASE_URL = "${baseUrl}";
+    var BASE_URL = "${baseUrl ?? defaultChatwootOptions.baseUrl}";
     var g = d.createElement(t),
       s = d.getElementsByTagName(t)[0];
     g.src = BASE_URL + "/packs/js/sdk.js";
@@ -77,7 +78,7 @@ export const executeChatwootBlock = (
   if (state.whatsApp) return { outgoingEdgeId: block.outgoingEdgeId }
   const { typebot, resultId } = state.typebotsQueue[0]
   const chatwootCode =
-    block.options.task === 'Close widget'
+    block.options?.task === 'Close widget'
       ? chatwootCloseCode
       : isDefined(resultId)
       ? parseChatwootOpenCode({
@@ -86,10 +87,12 @@ export const executeChatwootBlock = (
           resultId,
         })
       : ''
+
   return {
     outgoingEdgeId: block.outgoingEdgeId,
     clientSideActions: [
       {
+        type: 'chatwoot',
         chatwoot: {
           scriptToExecute: {
             content: parseVariables(typebot.variables, { fieldToParse: 'id' })(

@@ -1,9 +1,8 @@
 import test, { expect } from '@playwright/test'
 import { createTypebots } from '@typebot.io/lib/playwright/databaseActions'
 import { parseDefaultGroupWithBlock } from '@typebot.io/lib/playwright/databaseHelpers'
-import { InputBlockType, ItemType } from '@typebot.io/schemas'
 import { createId } from '@paralleldrive/cuid2'
-import { defaultPictureChoiceOptions } from '@typebot.io/schemas/features/blocks/inputs/pictureChoice'
+import { InputBlockType } from '@typebot.io/schemas/features/blocks/inputs/constants'
 
 const firstImageSrc =
   'https://images.unsplash.com/flagged/photo-1575517111839-3a3843ee7f5d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=2940&q=80'
@@ -25,10 +24,8 @@ test.describe.parallel('Picture choice input block', () => {
           items: [
             {
               id: 'choice1',
-              type: ItemType.PICTURE_CHOICE,
             },
           ],
-          options: { ...defaultPictureChoiceOptions },
         }),
       },
     ])
@@ -57,7 +54,7 @@ test.describe.parallel('Picture choice input block', () => {
     await page.getByPlaceholder('Paste the image link...').fill(thirdImageSrc)
     await page.getByLabel('Title:').fill('Third image')
     await page.getByLabel('Description:').fill('Third description')
-    await page.getByRole('button', { name: 'Preview' }).click()
+    await page.getByRole('button', { name: 'Test' }).click()
     await expect(
       page.getByRole('button', {
         name: 'First image First image First description',
@@ -78,7 +75,7 @@ test.describe.parallel('Picture choice input block', () => {
       page.locator('typebot-standard').getByText('Third image')
     ).toBeVisible()
 
-    await page.getByTestId('block2-icon').click()
+    await page.getByTestId('block block2').click({ position: { x: 0, y: 0 } })
     await page.getByText('Multiple choice?').click()
     await page.getByLabel('Submit button label:').fill('Go')
     await page.getByRole('button', { name: 'Restart' }).click()
@@ -97,7 +94,7 @@ test.describe.parallel('Picture choice input block', () => {
       page.locator('typebot-standard').getByText('First image, Second image')
     ).toBeVisible()
 
-    await page.getByTestId('block2-icon').click()
+    await page.getByTestId('block block2').click({ position: { x: 0, y: 0 } })
     await page.getByText('Is searchable?').click()
     await page.getByLabel('Input placeholder:').fill('Search...')
     await page.getByRole('button', { name: 'Restart' }).click()

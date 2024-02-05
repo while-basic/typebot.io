@@ -19,8 +19,8 @@ import {
   KeyValue,
   VariableForTest,
   ResponseVariableMapping,
-  WebhookOptions,
   Webhook,
+  WebhookBlock,
 } from '@typebot.io/schemas'
 import { useState, useMemo } from 'react'
 import { executeWebhook } from '../queries/executeWebhookQuery'
@@ -30,14 +30,21 @@ import { QueryParamsInputs, HeadersInputs } from './KeyValueInputs'
 import { DataVariableInputs } from './ResponseMappingInputs'
 import { VariableForTestInputs } from './VariableForTestInputs'
 import { SwitchWithRelatedSettings } from '@/components/SwitchWithRelatedSettings'
-import { HttpMethod } from '@typebot.io/schemas/features/blocks/integrations/webhook/enums'
+import {
+  HttpMethod,
+  defaultTimeout,
+  defaultWebhookAttributes,
+  defaultWebhookBlockOptions,
+  maxTimeout,
+} from '@typebot.io/schemas/features/blocks/integrations/webhook/constants'
+import { NumberInput } from '@/components/inputs'
 
 type Props = {
   blockId: string
-  webhook: Webhook
-  options: WebhookOptions
+  webhook: Webhook | undefined
+  options: WebhookBlock['options']
   onWebhookChange: (webhook: Webhook) => void
-  onOptionsChange: (options: WebhookOptions) => void
+  onOptionsChange: (options: WebhookBlock['options']) => void
 }
 
 export const WebhookAdvancedConfigForm = ({
@@ -77,15 +84,18 @@ export const WebhookAdvancedConfigForm = ({
   const updateIsCustomBody = (isCustomBody: boolean) =>
     onOptionsChange({ ...options, isCustomBody })
 
+  const updateTimeout = (timeout: number | undefined) =>
+    onOptionsChange({ ...options, timeout })
+
   const executeTestRequest = async () => {
     if (!typebot) return
     setIsTestResponseLoading(true)
-    if (!options.webhook) await save()
+    if (!options?.webhook) await save()
     else await save()
     const { data, error } = await executeWebhook(
       typebot.id,
       convertVariablesForTestToVariables(
-        options.variablesForTest,
+        options?.variablesForTest ?? [],
         typebot.variables
       ),
       { blockId }
@@ -108,23 +118,34 @@ export const WebhookAdvancedConfigForm = ({
     [responseKeys]
   )
 
+  const isCustomBody =
+    options?.isCustomBody ?? defaultWebhookBlockOptions.isCustomBody
+
   return (
     <>
       <SwitchWithRelatedSettings
         label="Advanced configuration"
-        initialValue={options.isAdvancedConfig ?? true}
+        initialValue={
+          options?.isAdvancedConfig ??
+          defaultWebhookBlockOptions.isAdvancedConfig
+        }
         onCheckChange={updateAdvancedConfig}
       >
         <SwitchWithLabel
           label="Execute on client"
           moreInfoContent="If enabled, the webhook will be executed on the client. It means it will be executed in the browser of your visitor. Make sure to enable CORS and do not expose sensitive data."
-          initialValue={options.isExecutedOnClient ?? false}
+          initialValue={
+            options?.isExecutedOnClient ??
+            defaultWebhookBlockOptions.isExecutedOnClient
+          }
           onCheckChange={updateIsExecutedOnClient}
         />
         <HStack justify="space-between">
           <Text>Method:</Text>
           <DropdownList
-            currentItem={webhook.method as HttpMethod}
+            currentItem={
+              (webhook?.method ?? defaultWebhookAttributes.method) as HttpMethod
+            }
             onItemSelect={updateMethod}
             items={Object.values(HttpMethod)}
           />
@@ -137,11 +158,12 @@ export const WebhookAdvancedConfigForm = ({
             </AccordionButton>
             <AccordionPanel pt="4">
               <TableList<KeyValue>
-                initialItems={webhook.queryParams}
+                initialItems={webhook?.queryParams}
                 onItemsChange={updateQueryParams}
-                Item={QueryParamsInputs}
                 addLabel="Add a param"
-              />
+              >
+                {(props) => <QueryParamsInputs {...props} />}
+              </TableList>
             </AccordionPanel>
           </AccordionItem>
           <AccordionItem>
@@ -151,11 +173,12 @@ export const WebhookAdvancedConfigForm = ({
             </AccordionButton>
             <AccordionPanel pt="4">
               <TableList<KeyValue>
-                initialItems={webhook.headers}
+                initialItems={webhook?.headers}
                 onItemsChange={updateHeaders}
-                Item={HeadersInputs}
                 addLabel="Add a value"
-              />
+              >
+                {(props) => <HeadersInputs {...props} />}
+              </TableList>
             </AccordionPanel>
           </AccordionItem>
           <AccordionItem>
@@ -166,12 +189,12 @@ export const WebhookAdvancedConfigForm = ({
             <AccordionPanel py={4} as={Stack} spacing="6">
               <SwitchWithLabel
                 label="Custom body"
-                initialValue={options.isCustomBody ?? true}
+                initialValue={isCustomBody}
                 onCheckChange={updateIsCustomBody}
               />
-              {(options.isCustomBody ?? true) && (
+              {isCustomBody && (
                 <CodeEditor
-                  defaultValue={webhook.body ?? ''}
+                  defaultValue={webhook?.body}
                   lang="json"
                   onChange={updateBody}
                   debounceTimeout={0}
@@ -181,21 +204,38 @@ export const WebhookAdvancedConfigForm = ({
           </AccordionItem>
           <AccordionItem>
             <AccordionButton justifyContent="space-between">
+              Advanced parameters
+              <AccordionIcon />
+            </AccordionButton>
+            <AccordionPanel pt="4">
+              <NumberInput
+                label="Timeout (s)"
+                defaultValue={options?.timeout ?? defaultTimeout}
+                min={1}
+                max={maxTimeout}
+                onValueChange={updateTimeout}
+                withVariableButton={false}
+              />
+            </AccordionPanel>
+          </AccordionItem>
+          <AccordionItem>
+            <AccordionButton justifyContent="space-between">
               Variable values for test
               <AccordionIcon />
             </AccordionButton>
             <AccordionPanel pt="4">
               <TableList<VariableForTest>
-                initialItems={options?.variablesForTest ?? []}
+                initialItems={options?.variablesForTest}
                 onItemsChange={updateVariablesForTest}
-                Item={VariableForTestInputs}
                 addLabel="Add an entry"
-              />
+              >
+                {(props) => <VariableForTestInputs {...props} />}
+              </TableList>
             </AccordionPanel>
           </AccordionItem>
         </Accordion>
       </SwitchWithRelatedSettings>
-      {webhook.url && (
+      {webhook?.url && (
         <Button
           onClick={executeTestRequest}
           colorScheme="blue"
@@ -207,7 +247,9 @@ export const WebhookAdvancedConfigForm = ({
       {testResponse && (
         <CodeEditor isReadOnly lang="json" value={testResponse} />
       )}
-      {(testResponse || options.responseVariableMapping.length > 0) && (
+      {(testResponse ||
+        (options?.responseVariableMapping &&
+          options.responseVariableMapping.length > 0)) && (
         <Accordion allowMultiple>
           <AccordionItem>
             <AccordionButton justifyContent="space-between">
@@ -216,11 +258,12 @@ export const WebhookAdvancedConfigForm = ({
             </AccordionButton>
             <AccordionPanel pt="4">
               <TableList<ResponseVariableMapping>
-                initialItems={options.responseVariableMapping}
+                initialItems={options?.responseVariableMapping}
                 onItemsChange={updateResponseVariableMapping}
-                Item={ResponseMappingInputs}
                 addLabel="Add an entry"
-              />
+              >
+                {(props) => <ResponseMappingInputs {...props} />}
+              </TableList>
             </AccordionPanel>
           </AccordionItem>
         </Accordion>

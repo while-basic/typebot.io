@@ -2,10 +2,8 @@ import test, { expect } from '@playwright/test'
 import { createTypebots } from '@typebot.io/lib/playwright/databaseActions'
 import { parseDefaultGroupWithBlock } from '@typebot.io/lib/playwright/databaseHelpers'
 import { createId } from '@paralleldrive/cuid2'
-import {
-  defaultChatwootOptions,
-  IntegrationBlockType,
-} from '@typebot.io/schemas'
+import { IntegrationBlockType } from '@typebot.io/schemas/features/blocks/integrations/constants'
+import { defaultChatwootOptions } from '@typebot.io/schemas/features/blocks/integrations/chatwoot/constants'
 
 const typebotId = createId()
 
@@ -18,7 +16,6 @@ test.describe('Chatwoot block', () => {
         id: typebotId,
         ...parseDefaultGroupWithBlock({
           type: IntegrationBlockType.CHATWOOT,
-          options: defaultChatwootOptions,
         }),
       },
     ])
@@ -37,7 +34,7 @@ test.describe('Chatwoot block', () => {
     await page.getByLabel('Email').fill('john@email.com')
     await page.getByLabel('Avatar URL').fill('https://domain.com/avatar.png')
     await page.getByLabel('Phone number').fill('+33654347543')
-    await page.getByRole('button', { name: 'Preview', exact: true }).click()
+    await page.getByRole('button', { name: 'Test', exact: true }).click()
     await expect(
       page.getByText('Chatwoot block is not supported in preview').nth(0)
     ).toBeVisible()

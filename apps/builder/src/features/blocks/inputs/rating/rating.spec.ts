@@ -1,8 +1,8 @@
 import test, { expect } from '@playwright/test'
 import { createTypebots } from '@typebot.io/lib/playwright/databaseActions'
 import { parseDefaultGroupWithBlock } from '@typebot.io/lib/playwright/databaseHelpers'
-import { defaultRatingInputOptions, InputBlockType } from '@typebot.io/schemas'
 import { createId } from '@paralleldrive/cuid2'
+import { InputBlockType } from '@typebot.io/schemas/features/blocks/inputs/constants'
 
 const boxSvg = `<svg
     xmlns="http://www.w3.org/2000/svg"
@@ -24,14 +24,13 @@ test('options should work', async ({ page }) => {
       id: typebotId,
       ...parseDefaultGroupWithBlock({
         type: InputBlockType.RATING,
-        options: defaultRatingInputOptions,
       }),
     },
   ])
 
   await page.goto(`/typebots/${typebotId}/edit`)
 
-  await page.click('text=Preview')
+  await page.click('text=Test')
   await expect(page.locator(`text=Send`)).toBeHidden()
   await page.getByRole('button', { name: '8' }).click()
   await page.locator(`text=Send`).click()

@@ -1,6 +1,5 @@
 import {
-  ChatReply,
-  InputBlockType,
+  ContinueChatResponse,
   SessionState,
   Settings,
 } from '@typebot.io/schemas'
@@ -16,20 +15,24 @@ import { convertInputToWhatsAppMessages } from './convertInputToWhatsAppMessage'
 import { isNotDefined } from '@typebot.io/lib/utils'
 import { computeTypingDuration } from '../computeTypingDuration'
 import { continueBotFlow } from '../continueBotFlow'
+import { InputBlockType } from '@typebot.io/schemas/features/blocks/inputs/constants'
+import { defaultSettings } from '@typebot.io/schemas/features/typebot/settings/constants'
 
 // Media can take some time to be delivered. This make sure we don't send a message before the media is delivered.
 const messageAfterMediaTimeout = 5000
 
 type Props = {
   to: string
+  isFirstChatChunk: boolean
   typingEmulation: SessionState['typingEmulation']
   credentials: WhatsAppCredentials['data']
   state: SessionState
-} & Pick<ChatReply, 'messages' | 'input' | 'clientSideActions'>
+} & Pick<ContinueChatResponse, 'messages' | 'input' | 'clientSideActions'>
 
 export const sendChatReplyToWhatsApp = async ({
   to,
   typingEmulation,
+  isFirstChatChunk,
   messages,
   input,
   clientSideActions,
@@ -57,6 +60,7 @@ export const sendChatReplyToWhatsApp = async ({
       to,
       messages,
       input,
+      isFirstChatChunk: false,
       typingEmulation: newSessionState.typingEmulation,
       clientSideActions,
       credentials,
@@ -64,19 +68,40 @@ export const sendChatReplyToWhatsApp = async ({
     })
   }
 
+  let i = -1
   for (const message of messagesBeforeInput) {
+    i += 1
+    if (
+      i > 0 &&
+      (typingEmulation?.delayBetweenBubbles ??
+        defaultSettings.typingEmulation.delayBetweenBubbles) > 0
+    ) {
+      await new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          (typingEmulation?.delayBetweenBubbles ??
+            defaultSettings.typingEmulation.delayBetweenBubbles) * 1000
+        )
+      )
+    }
     const whatsAppMessage = convertMessageToWhatsAppMessage(message)
     if (isNotDefined(whatsAppMessage)) continue
     const lastSentMessageIsMedia = ['audio', 'video', 'image'].includes(
       sentMessages.at(-1)?.type ?? ''
     )
+
     const typingDuration = lastSentMessageIsMedia
       ? messageAfterMediaTimeout
+      : isFirstChatChunk &&
+        i === 0 &&
+        (typingEmulation?.isDisabledOnFirstMessage ??
+          defaultSettings.typingEmulation.isDisabledOnFirstMessage)
+      ? 0
       : getTypingDuration({
           message: whatsAppMessage,
           typingEmulation,
         })
-    if (typingDuration)
+    if ((typingDuration ?? 0) > 0)
       await new Promise((resolve) => setTimeout(resolve, typingDuration))
     try {
       await sendWhatsAppMessage({
@@ -101,6 +126,7 @@ export const sendChatReplyToWhatsApp = async ({
           to,
           messages,
           input,
+          isFirstChatChunk: false,
           typingEmulation: newSessionState.typingEmulation,
           clientSideActions,
           credentials,
@@ -175,7 +201,9 @@ const getTypingDuration = ({
   }
 }
 
-const isLastMessageIncludedInInput = (input: ChatReply['input']): boolean => {
+const isLastMessageIncludedInInput = (
+  input: ContinueChatResponse['input']
+): boolean => {
   if (isNotDefined(input)) return false
   return input.type === InputBlockType.CHOICE
 }
@@ -183,11 +211,16 @@ const isLastMessageIncludedInInput = (input: ChatReply['input']): boolean => {
 const executeClientSideAction =
   (context: { to: string; credentials: WhatsAppCredentials['data'] }) =>
   async (
-    clientSideAction: NonNullable<ChatReply['clientSideActions']>[number]
+    clientSideAction: NonNullable<
+      ContinueChatResponse['clientSideActions']
+    >[number]
   ): Promise<{ replyToSend: string | undefined } | void> => {
     if ('wait' in clientSideAction) {
       await new Promise((resolve) =>
-        setTimeout(resolve, clientSideAction.wait.secondsToWaitFor * 1000)
+        setTimeout(
+          resolve,
+          Math.min(clientSideAction.wait.secondsToWaitFor, 10) * 1000
+        )
       )
       if (!clientSideAction.expectsDedicatedReply) return
       return {

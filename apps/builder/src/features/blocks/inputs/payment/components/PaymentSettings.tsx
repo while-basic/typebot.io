@@ -11,11 +11,7 @@ import {
   AccordionPanel,
 } from '@chakra-ui/react'
 import { DropdownList } from '@/components/DropdownList'
-import {
-  PaymentAddress,
-  PaymentInputOptions,
-  PaymentProvider,
-} from '@typebot.io/schemas'
+import { PaymentAddress, PaymentInputBlock } from '@typebot.io/schemas'
 import React, { ChangeEvent } from 'react'
 import { currencies } from '../currencies'
 import { StripeConfigModal } from './StripeConfigModal'
@@ -23,15 +19,21 @@ import { CredentialsDropdown } from '@/features/credentials/components/Credentia
 import { TextInput } from '@/components/inputs'
 import { useWorkspace } from '@/features/workspace/WorkspaceProvider'
 import { PaymentAddressSettings } from './PaymentAddressSettings'
+import {
+  PaymentProvider,
+  defaultPaymentInputOptions,
+} from '@typebot.io/schemas/features/blocks/inputs/payment/constants'
+import { useTranslate } from '@tolgee/react'
 
 type Props = {
-  options: PaymentInputOptions
-  onOptionsChange: (options: PaymentInputOptions) => void
+  options: PaymentInputBlock['options']
+  onOptionsChange: (options: PaymentInputBlock['options']) => void
 }
 
 export const PaymentSettings = ({ options, onOptionsChange }: Props) => {
   const { workspace } = useWorkspace()
   const { isOpen, onOpen, onClose } = useDisclosure()
+  const { t } = useTranslate()
 
   const updateProvider = (provider: PaymentProvider) => {
     onOptionsChange({
@@ -62,80 +64,85 @@ export const PaymentSettings = ({ options, onOptionsChange }: Props) => {
   const updateName = (name: string) =>
     onOptionsChange({
       ...options,
-      additionalInformation: { ...options.additionalInformation, name },
+      additionalInformation: { ...options?.additionalInformation, name },
     })
 
   const updateEmail = (email: string) =>
     onOptionsChange({
       ...options,
-      additionalInformation: { ...options.additionalInformation, email },
+      additionalInformation: { ...options?.additionalInformation, email },
     })
 
   const updatePhoneNumber = (phoneNumber: string) =>
     onOptionsChange({
       ...options,
-      additionalInformation: { ...options.additionalInformation, phoneNumber },
+      additionalInformation: { ...options?.additionalInformation, phoneNumber },
     })
 
   const updateButtonLabel = (button: string) =>
     onOptionsChange({
       ...options,
-      labels: { ...options.labels, button },
+      labels: { ...options?.labels, button },
     })
 
   const updateSuccessLabel = (success: string) =>
     onOptionsChange({
       ...options,
-      labels: { ...options.labels, success },
+      labels: { ...options?.labels, success },
     })
 
   const updateDescription = (description: string) =>
     onOptionsChange({
       ...options,
-      additionalInformation: { ...options.additionalInformation, description },
+      additionalInformation: { ...options?.additionalInformation, description },
     })
 
   const updateAddress = (address: PaymentAddress) =>
     onOptionsChange({
       ...options,
-      additionalInformation: { ...options.additionalInformation, address },
+      additionalInformation: { ...options?.additionalInformation, address },
     })
 
   return (
     <Stack spacing={4}>
       <Stack>
-        <Text>Provider:</Text>
+        <Text>{t('blocks.inputs.payment.settings.provider.label')}</Text>
         <DropdownList
           onItemSelect={updateProvider}
           items={Object.values(PaymentProvider)}
-          currentItem={options.provider}
+          currentItem={options?.provider ?? defaultPaymentInputOptions.provider}
         />
       </Stack>
       <Stack>
-        <Text>Account:</Text>
+        <Text>{t('blocks.inputs.payment.settings.account.label')}</Text>
         {workspace && (
           <CredentialsDropdown
             type="stripe"
             workspaceId={workspace.id}
-            currentCredentialsId={options.credentialsId}
+            currentCredentialsId={options?.credentialsId}
             onCredentialsSelect={updateCredentials}
             onCreateNewClick={onOpen}
-            credentialsName="Stripe account"
+            credentialsName={t(
+              'blocks.inputs.payment.settings.accountText.label',
+              {
+                provider: 'Stripe',
+              }
+            )}
           />
         )}
       </Stack>
       <HStack>
         <TextInput
-          label="Price amount:"
+          label={t('blocks.inputs.payment.settings.priceAmount.label')}
           onChange={updateAmount}
-          defaultValue={options.amount ?? ''}
+          defaultValue={options?.amount}
           placeholder="30.00"
         />
         <Stack>
-          <Text>Currency:</Text>
+          <Text>{t('blocks.inputs.payment.settings.currency.label')}</Text>
           <Select
             placeholder="Select option"
-            value={options.currency}
+            value={options?.currency ?? defaultPaymentInputOptions.currency}
             onChange={updateCurrency}
           >
             {currencies.map((currency) => (
@@ -147,50 +154,60 @@ export const PaymentSettings = ({ options, onOptionsChange }: Props) => {
         </Stack>
       </HStack>
       <TextInput
-        label="Button label:"
+        label={t('blocks.inputs.settings.button.label')}
         onChange={updateButtonLabel}
-        defaultValue={options.labels.button}
-        placeholder="Pay"
+        defaultValue={
+          options?.labels?.button ?? defaultPaymentInputOptions.labels.button
+        }
       />
       <TextInput
-        label="Success message:"
+        label={t('blocks.inputs.payment.settings.successMessage.label')}
         onChange={updateSuccessLabel}
-        defaultValue={options.labels.success ?? 'Success'}
-        placeholder="Success"
+        defaultValue={
+          options?.labels?.success ?? defaultPaymentInputOptions.labels.success
+        }
       />
       <Accordion allowToggle>
         <AccordionItem>
           <AccordionButton justifyContent="space-between">
-            Additional information
+            {t('blocks.inputs.payment.settings.additionalInformation.label')}
             <AccordionIcon />
           </AccordionButton>
           <AccordionPanel py={4} as={Stack} spacing="6">
             <TextInput
-              label="Description:"
-              defaultValue={options.additionalInformation?.description ?? ''}
+              label={t('blocks.inputs.settings.description.label')}
+              defaultValue={options?.additionalInformation?.description}
               onChange={updateDescription}
-              placeholder="A digital product"
+              placeholder={t(
+                'blocks.inputs.payment.settings.additionalInformation.description.placeholder.label'
+              )}
             />
             <TextInput
-              label="Name:"
-              defaultValue={options.additionalInformation?.name ?? ''}
+              label={t(
+                'blocks.inputs.payment.settings.additionalInformation.name.label'
+              )}
+              defaultValue={options?.additionalInformation?.name}
               onChange={updateName}
               placeholder="John Smith"
             />
             <TextInput
-              label="Email:"
-              defaultValue={options.additionalInformation?.email ?? ''}
+              label={t(
+                'blocks.inputs.payment.settings.additionalInformation.email.label'
+              )}
+              defaultValue={options?.additionalInformation?.email}
               onChange={updateEmail}
               placeholder="john@gmail.com"
             />
             <TextInput
-              label="Phone number:"
-              defaultValue={options.additionalInformation?.phoneNumber ?? ''}
+              label={t(
+                'blocks.inputs.payment.settings.additionalInformation.phone.label'
+              )}
+              defaultValue={options?.additionalInformation?.phoneNumber}
               onChange={updatePhoneNumber}
               placeholder="+33XXXXXXXXX"
             />
             <PaymentAddressSettings
-              address={options.additionalInformation?.address}
+              address={options?.additionalInformation?.address}
               onAddressChange={updateAddress}
             />
           </AccordionPanel>

@@ -3,15 +3,18 @@ import { TextInput } from '@/components/inputs'
 import { SwitchWithLabel } from '@/components/inputs/SwitchWithLabel'
 import { VariableSearchInput } from '@/components/inputs/VariableSearchInput'
 import { FormLabel, Stack } from '@chakra-ui/react'
-import { DateInputOptions, Variable } from '@typebot.io/schemas'
+import { DateInputBlock, Variable } from '@typebot.io/schemas'
 import React from 'react'
+import { defaultDateInputOptions } from '@typebot.io/schemas/features/blocks/inputs/date/constants'
+import { useTranslate } from '@tolgee/react'
 
 type Props = {
-  options: DateInputOptions
-  onOptionsChange: (options: DateInputOptions) => void
+  options: DateInputBlock['options']
+  onOptionsChange: (options: DateInputBlock['options']) => void
 }
 
 export const DateInputSettings = ({ options, onOptionsChange }: Props) => {
+  const { t } = useTranslate()
   const updateFromLabel = (from: string) =>
     onOptionsChange({ ...options, labels: { ...options?.labels, from } })
   const updateToLabel = (to: string) =>
@@ -40,56 +43,72 @@ export const DateInputSettings = ({ options, onOptionsChange }: Props) => {
   return (
     <Stack spacing={4}>
       <SwitchWithRelatedSettings
-        label="Is range?"
-        initialValue={options.isRange}
+        label={t('blocks.inputs.date.settings.isRange.label')}
+        initialValue={options?.isRange ?? defaultDateInputOptions.isRange}
         onCheckChange={updateIsRange}
       >
         <TextInput
-          label="From label:"
-          defaultValue={options.labels.from}
+          label={t('blocks.inputs.date.settings.from.label')}
+          defaultValue={
+            options?.labels?.from ?? defaultDateInputOptions.labels.from
+          }
           onChange={updateFromLabel}
         />
         <TextInput
-          label="To label:"
-          defaultValue={options.labels.to}
+          label={t('blocks.inputs.date.settings.to.label')}
+          defaultValue={
+            options?.labels?.to ??
+            t('blocks.inputs.date.settings.toInputValue.label')
+          }
           onChange={updateToLabel}
         />
       </SwitchWithRelatedSettings>
       <SwitchWithLabel
-        label="With time?"
-        initialValue={options.hasTime}
+        label={t('blocks.inputs.date.settings.withTime.label')}
+        initialValue={options?.hasTime ?? defaultDateInputOptions.hasTime}
         onCheckChange={updateHasTime}
       />
       <TextInput
-        label="Button label:"
-        defaultValue={options.labels.button}
+        label={t('blocks.inputs.settings.button.label')}
+        defaultValue={
+          options?.labels?.button ?? defaultDateInputOptions.labels.button
+        }
         onChange={updateButtonLabel}
       />
       <TextInput
-        label="Min:"
-        defaultValue={options.min}
-        placeholder={options.hasTime ? 'YYYY-MM-DDTHH:mm' : 'YYYY-MM-DD'}
+        label={t('blocks.inputs.settings.min.label')}
+        defaultValue={options?.min}
+        placeholder={options?.hasTime ? 'YYYY-MM-DDTHH:mm' : 'YYYY-MM-DD'}
         onChange={updateMin}
       />
       <TextInput
-        label="Max:"
-        defaultValue={options.max}
-        placeholder={options.hasTime ? 'YYYY-MM-DDTHH:mm' : 'YYYY-MM-DD'}
+        label={t('blocks.inputs.settings.max.label')}
+        defaultValue={options?.max}
+        placeholder={options?.hasTime ? 'YYYY-MM-DDTHH:mm' : 'YYYY-MM-DD'}
         onChange={updateMax}
       />
       <TextInput
-        label="Format:"
-        defaultValue={options.format}
-        moreInfoTooltip="Popular formats: dd/MM/yyyy, MM/dd/yy, yyyy-MM-dd"
-        placeholder={options.hasTime ? 'dd/MM/yyyy HH:mm' : 'dd/MM/yyyy'}
+        label={t('blocks.inputs.date.settings.format.label')}
+        defaultValue={
+          options?.format ??
+          (options?.hasTime
+            ? defaultDateInputOptions.formatWithTime
+            : defaultDateInputOptions.format)
+        }
+        moreInfoTooltip={`
+					${t(
+            'blocks.inputs.date.settings.format.example.label'
+          )} dd/MM/yyyy, MM/dd/yy, yyyy-MM-dd
+				`}
+        placeholder={options?.hasTime ? 'dd/MM/yyyy HH:mm' : 'dd/MM/yyyy'}
         onChange={updateFormat}
       />
       <Stack>
         <FormLabel mb="0" htmlFor="variable">
-          Save answer in a variable:
+          {t('blocks.inputs.settings.saveAnswer.label')}
         </FormLabel>
         <VariableSearchInput
-          initialVariableId={options.variableId}
+          initialVariableId={options?.variableId}
           onSelectVariable={updateVariable}
         />
       </Stack>

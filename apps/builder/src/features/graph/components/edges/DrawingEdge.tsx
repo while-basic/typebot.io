@@ -8,28 +8,47 @@ import { Coordinates } from '@dnd-kit/utilities'
 import { computeConnectingEdgePath } from '../../helpers/computeConnectingEdgePath'
 import { computeEdgePathToMouse } from '../../helpers/computeEdgePathToMouth'
 import { useGraph } from '../../providers/GraphProvider'
-import { useGroupsCoordinates } from '../../providers/GroupsCoordinateProvider'
 import { ConnectingIds } from '../../types'
+import { useEventsCoordinates } from '../../providers/EventsCoordinateProvider'
+import { eventWidth, groupWidth } from '../../constants'
+import { useGroupsStore } from '../../hooks/useGroupsStore'
 
-export const DrawingEdge = () => {
-  const { graphPosition, setConnectingIds, connectingIds } = useGraph()
+type Props = {
+  connectingIds: ConnectingIds
+}
+
+export const DrawingEdge = ({ connectingIds }: Props) => {
+  const { graphPosition, setConnectingIds } = useGraph()
   const {
     sourceEndpointYOffsets: sourceEndpoints,
     targetEndpointYOffsets: targetEndpoints,
   } = useEndpoints()
-  const { groupsCoordinates } = useGroupsCoordinates()
+  const groupsCoordinates = useGroupsStore(
+    (state) => state.groupsCoordinates,
+    // Keep in cache because groups are not changing while drawing an edge
+    () => true
+  )
+  const { eventsCoordinates } = useEventsCoordinates()
   const { createEdge } = useTypebot()
   const [mousePosition, setMousePosition] = useState<Coordinates | null>(null)
 
-  const sourceGroupCoordinates =
-    groupsCoordinates && groupsCoordinates[connectingIds?.source.groupId ?? '']
+  const sourceElementCoordinates = connectingIds
+    ? 'eventId' in connectingIds.source
+      ? eventsCoordinates[connectingIds?.source.eventId]
+      : groupsCoordinates
+      ? groupsCoordinates[connectingIds?.source.groupId ?? '']
+      : undefined
+    : undefined
+
   const targetGroupCoordinates =
     groupsCoordinates && groupsCoordinates[connectingIds?.target?.groupId ?? '']
 
   const sourceTop = useMemo(() => {
     if (!connectingIds) return 0
     const endpointId =
-      connectingIds.source.itemId ?? connectingIds.source.blockId
+      'eventId' in connectingIds.source
+        ? connectingIds.source.eventId
+        : connectingIds.source.itemId ?? connectingIds.source.blockId
     return sourceEndpoints.get(endpointId)?.y
   }, [connectingIds, sourceEndpoints])
 
@@ -40,27 +59,38 @@ export const DrawingEdge = () => {
   }, [connectingIds, targetEndpoints])
 
   const path = useMemo(() => {
-    if (!sourceTop || !sourceGroupCoordinates || !mousePosition) return ``
+    if (
+      !sourceTop ||
+      !sourceElementCoordinates ||
+      !mousePosition ||
+      !connectingIds?.source
+    )
+      return ``
 
     return targetGroupCoordinates
       ? computeConnectingEdgePath({
-          sourceGroupCoordinates,
+          sourceGroupCoordinates: sourceElementCoordinates,
           targetGroupCoordinates,
+          elementWidth:
+            'eventId' in connectingIds.source ? eventWidth : groupWidth,
           sourceTop,
           targetTop,
           graphScale: graphPosition.scale,
         })
       : computeEdgePathToMouse({
-          sourceGroupCoordinates,
+          sourceGroupCoordinates: sourceElementCoordinates,
           mousePosition,
           sourceTop,
+          elementWidth:
+            'eventId' in connectingIds.source ? eventWidth : groupWidth,
         })
   }, [
     sourceTop,
-    sourceGroupCoordinates,
-    targetGroupCoordinates,
-    targetTop,
+    sourceElementCoordinates,
     mousePosition,
+    targetGroupCoordinates,
+    connectingIds?.source,
+    targetTop,
     graphPosition.scale,
   ])
 
@@ -86,10 +116,7 @@ export const DrawingEdge = () => {
     createEdge({ from: connectingIds.source, to: connectingIds.target })
   }
 
-  if (
-    (mousePosition && mousePosition.x === 0 && mousePosition.y === 0) ||
-    !connectingIds
-  )
+  if (mousePosition && mousePosition.x === 0 && mousePosition.y === 0)
     return <></>
   return (
     <path

@@ -1,7 +1,7 @@
 import prisma from '@typebot.io/lib/prisma'
 import { authenticatedProcedure } from '@/helpers/server/trpc'
 import { TRPCError } from '@trpc/server'
-import { ResultWithAnswers, resultWithAnswersSchema } from '@typebot.io/schemas'
+import { resultWithAnswersSchema } from '@typebot.io/schemas'
 import { z } from 'zod'
 import { isReadTypebotForbidden } from '@/features/typebot/helpers/isReadTypebotForbidden'
 
@@ -11,7 +11,7 @@ export const getResults = authenticatedProcedure
   .meta({
     openapi: {
       method: 'GET',
-      path: '/typebots/{typebotId}/results',
+      path: '/v1/typebots/{typebotId}/results',
       protect: true,
       summary: 'List results ordered by descending creation date',
       tags: ['Results'],
@@ -19,7 +19,11 @@ export const getResults = authenticatedProcedure
   })
   .input(
     z.object({
-      typebotId: z.string(),
+      typebotId: z
+        .string()
+        .describe(
+          "[Where to find my bot's ID?](../how-to#how-to-find-my-typebotid)"
+        ),
       limit: z.coerce.number().min(1).max(maxLimit).default(50),
       cursor: z.string().optional(),
     })
@@ -44,7 +48,6 @@ export const getResults = authenticatedProcedure
       },
       select: {
         id: true,
-        workspaceId: true,
         groups: true,
         collaborators: {
           select: {
@@ -52,11 +55,22 @@ export const getResults = authenticatedProcedure
             type: true,
           },
         },
+        workspace: {
+          select: {
+            isSuspended: true,
+            isPastDue: true,
+            members: {
+              select: {
+                userId: true,
+              },
+            },
+          },
+        },
       },
     })
     if (!typebot || (await isReadTypebotForbidden(typebot, user)))
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Typebot not found' })
-    const results = (await prisma.result.findMany({
+    const results = await prisma.result.findMany({
       take: limit + 1,
       cursor: cursor ? { id: cursor } : undefined,
       where: {
@@ -68,7 +82,7 @@ export const getResults = authenticatedProcedure
         createdAt: 'desc',
       },
       include: { answers: true },
-    })) as ResultWithAnswers[]
+    })
 
     let nextCursor: typeof cursor | undefined
     if (results.length > limit) {
@@ -76,5 +90,8 @@ export const getResults = authenticatedProcedure
       nextCursor = nextResult?.id
     }
 
-    return { results, nextCursor }
+    return {
+      results: z.array(resultWithAnswersSchema).parse(results),
+      nextCursor,
+    }
   })

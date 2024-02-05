@@ -1,30 +1,29 @@
 import {
   VariableWithValue,
-  ItemType,
   PictureChoiceBlock,
   Variable,
 } from '@typebot.io/schemas'
 import { isDefined } from '@typebot.io/lib'
 import { filterPictureChoiceItems } from './filterPictureChoiceItems'
-import { deepParseVariables } from '../../../variables/deepParseVariables'
+import { deepParseVariables } from '@typebot.io/variables/deepParseVariables'
 
 export const injectVariableValuesInPictureChoiceBlock =
   (variables: Variable[]) =>
   (block: PictureChoiceBlock): PictureChoiceBlock => {
     if (
-      block.options.dynamicItems?.isEnabled &&
+      block.options?.dynamicItems?.isEnabled &&
       block.options.dynamicItems.pictureSrcsVariableId
     ) {
       const pictureSrcsVariable = variables.find(
         (variable) =>
-          variable.id === block.options.dynamicItems?.pictureSrcsVariableId &&
+          variable.id === block.options?.dynamicItems?.pictureSrcsVariableId &&
           isDefined(variable.value)
       ) as VariableWithValue | undefined
-      if (!pictureSrcsVariable) return block
+      if (!pictureSrcsVariable) return deepParseVariables(variables)(block)
       const titlesVariable = block.options.dynamicItems.titlesVariableId
         ? (variables.find(
             (variable) =>
-              variable.id === block.options.dynamicItems?.titlesVariableId &&
+              variable.id === block.options?.dynamicItems?.titlesVariableId &&
               isDefined(variable.value)
           ) as VariableWithValue | undefined)
         : undefined
@@ -37,7 +36,7 @@ export const injectVariableValuesInPictureChoiceBlock =
         ? (variables.find(
             (variable) =>
               variable.id ===
-                block.options.dynamicItems?.descriptionsVariableId &&
+                block.options?.dynamicItems?.descriptionsVariableId &&
               isDefined(variable.value)
           ) as VariableWithValue | undefined)
         : undefined
@@ -52,10 +51,9 @@ export const injectVariableValuesInPictureChoiceBlock =
           : pictureSrcsVariable.value
 
       return {
-        ...block,
+        ...deepParseVariables(variables)(block),
         items: variableValues.filter(isDefined).map((pictureSrc, idx) => ({
           id: idx.toString(),
-          type: ItemType.PICTURE_CHOICE,
           blockId: block.id,
           pictureSrc,
           title: titlesVariableValues?.[idx] ?? '',

@@ -10,6 +10,7 @@ import {
   showPreviewMessage,
   toggle,
   setInputValue,
+  unmount,
 } from './features/commands'
 
 export const initStandard = (props: BotProps & { id?: string }) => {
@@ -23,13 +24,13 @@ export const initStandard = (props: BotProps & { id?: string }) => {
 export const initPopup = (props: PopupProps) => {
   const popupElement = document.createElement('typebot-popup')
   Object.assign(popupElement, props)
-  document.body.appendChild(popupElement)
+  document.body.prepend(popupElement)
 }
 
 export const initBubble = (props: BubbleProps) => {
   const bubbleElement = document.createElement('typebot-bubble')
   Object.assign(bubbleElement, props)
-  document.body.appendChild(bubbleElement)
+  document.body.prepend(bubbleElement)
 }
 
 type Typebot = {
@@ -43,6 +44,7 @@ type Typebot = {
   showPreviewMessage: typeof showPreviewMessage
   toggle: typeof toggle
   setInputValue: typeof setInputValue
+  unmount: typeof unmount
 }
 
 declare const window:
@@ -62,6 +64,7 @@ export const parseTypebot = () => ({
   showPreviewMessage,
   toggle,
   setInputValue,
+  unmount,
 })
 
 export const injectTypebotInWindow = (typebot: Typebot) => {

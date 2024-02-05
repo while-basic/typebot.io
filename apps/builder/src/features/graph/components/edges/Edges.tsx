@@ -1,34 +1,35 @@
 import { chakra, useColorMode } from '@chakra-ui/react'
 import { colors } from '@/lib/theme'
-import { Edge as EdgeProps } from '@typebot.io/schemas'
-import React, { useMemo } from 'react'
+import { BlockSource, Edge as EdgeProps, GroupV6 } from '@typebot.io/schemas'
+import React from 'react'
 import { DrawingEdge } from './DrawingEdge'
 import { DropOffEdge } from './DropOffEdge'
 import { Edge } from './Edge'
-import { TotalAnswersInBlock } from '@typebot.io/schemas/features/analytics'
+import {
+  TotalAnswers,
+  TotalVisitedEdges,
+} from '@typebot.io/schemas/features/analytics'
+import { useGraph } from '../../providers/GraphProvider'
 
 type Props = {
   edges: EdgeProps[]
-  totalAnswersInBlocks?: TotalAnswersInBlock[]
+  groups: GroupV6[]
+  inputBlockIds: string[]
+  totalVisitedEdges?: TotalVisitedEdges[]
+  totalAnswers?: TotalAnswers[]
   onUnlockProPlanClick?: () => void
 }
 
 export const Edges = ({
   edges,
-  totalAnswersInBlocks,
+  groups,
+  inputBlockIds,
+  totalVisitedEdges,
+  totalAnswers,
   onUnlockProPlanClick,
 }: Props) => {
+  const { connectingIds } = useGraph()
   const isDark = useColorMode().colorMode === 'dark'
-  const uniqueBlockIds = useMemo(
-    () => [
-      ...new Set(
-        totalAnswersInBlocks?.map(
-          (totalAnswersInBlock) => totalAnswersInBlock.blockId
-        )
-      ),
-    ],
-    [totalAnswersInBlocks]
-  )
   return (
     <chakra.svg
       width="full"
@@ -39,21 +40,33 @@ export const Edges = ({
       top="0"
       shapeRendering="geometricPrecision"
     >
-      <DrawingEdge />
+      {connectingIds && <DrawingEdge connectingIds={connectingIds} />}
       {edges.map((edge) => (
-        <Edge key={edge.id} edge={edge} />
+        <Edge
+          key={edge.id}
+          edge={edge}
+          fromGroupId={
+            'blockId' in edge.from
+              ? groups.find((g) =>
+                  g.blocks.some(
+                    (b) => b.id === (edge.from as BlockSource).blockId
+                  )
+                )?.id
+              : undefined
+          }
+        />
       ))}
-      {totalAnswersInBlocks &&
-        uniqueBlockIds
-          ?.slice(1)
-          .map((blockId) => (
-            <DropOffEdge
-              key={blockId}
-              blockId={blockId}
-              totalAnswersInBlocks={totalAnswersInBlocks}
-              onUnlockProPlanClick={onUnlockProPlanClick}
-            />
-          ))}
+      {totalVisitedEdges &&
+        totalAnswers &&
+        inputBlockIds.map((blockId) => (
+          <DropOffEdge
+            key={blockId}
+            blockId={blockId}
+            totalVisitedEdges={totalVisitedEdges}
+            totalAnswers={totalAnswers}
+            onUnlockProPlanClick={onUnlockProPlanClick}
+          />
+        ))}
       <marker
         id={'arrow'}
         refX="8"

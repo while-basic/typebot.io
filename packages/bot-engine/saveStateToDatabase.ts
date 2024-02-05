@@ -1,4 +1,4 @@
-import { ChatReply, ChatSession } from '@typebot.io/schemas'
+import { ContinueChatResponse, ChatSession } from '@typebot.io/schemas'
 import { upsertResult } from './queries/upsertResult'
 import { saveLogs } from './queries/saveLogs'
 import { updateSession } from './queries/updateSession'
@@ -6,13 +6,17 @@ import { formatLogDetails } from './logs/helpers/formatLogDetails'
 import { createSession } from './queries/createSession'
 import { deleteSession } from './queries/deleteSession'
 import * as Sentry from '@sentry/nextjs'
+import { saveVisitedEdges } from './queries/saveVisitedEdges'
+import { VisitedEdge } from '@typebot.io/prisma'
 
 type Props = {
   session: Pick<ChatSession, 'state'> & { id?: string }
-  input: ChatReply['input']
-  logs: ChatReply['logs']
-  clientSideActions: ChatReply['clientSideActions']
+  input: ContinueChatResponse['input']
+  logs: ContinueChatResponse['logs']
+  clientSideActions: ContinueChatResponse['clientSideActions']
+  visitedEdges: VisitedEdge[]
   forceCreateSession?: boolean
+  hasCustomEmbedBubble?: boolean
 }
 
 export const saveStateToDatabase = async ({
@@ -21,12 +25,16 @@ export const saveStateToDatabase = async ({
   logs,
   clientSideActions,
   forceCreateSession,
+  visitedEdges,
+  hasCustomEmbedBubble,
 }: Props) => {
   const containsSetVariableClientSideAction = clientSideActions?.some(
     (action) => action.expectsDedicatedReply
   )
 
-  const isCompleted = Boolean(!input && !containsSetVariableClientSideAction)
+  const isCompleted = Boolean(
+    !input && !containsSetVariableClientSideAction && !hasCustomEmbedBubble
+  )
 
   const resultId = state.typebotsQueue[0].resultId
 
@@ -66,6 +74,8 @@ export const saveStateToDatabase = async ({
       console.error('Failed to save logs', e)
       Sentry.captureException(e)
     }
+
+  if (visitedEdges.length > 0) await saveVisitedEdges(visitedEdges)
 
   return session
 }

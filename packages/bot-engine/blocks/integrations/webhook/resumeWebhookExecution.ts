@@ -2,20 +2,20 @@ import { byId } from '@typebot.io/lib'
 import {
   MakeComBlock,
   PabblyConnectBlock,
-  ReplyLog,
+  ChatLog,
   VariableWithUnknowValue,
   WebhookBlock,
   ZapierBlock,
 } from '@typebot.io/schemas'
 import { SessionState } from '@typebot.io/schemas/features/chat/sessionState'
 import { ExecuteIntegrationResponse } from '../../../types'
-import { parseVariables } from '../../../variables/parseVariables'
-import { updateVariablesInSession } from '../../../variables/updateVariablesInSession'
+import { parseVariables } from '@typebot.io/variables/parseVariables'
+import { updateVariablesInSession } from '@typebot.io/variables/updateVariablesInSession'
 
 type Props = {
   state: SessionState
   block: WebhookBlock | ZapierBlock | MakeComBlock | PabblyConnectBlock
-  logs?: ReplyLog[]
+  logs?: ChatLog[]
   response: {
     statusCode: number
     data?: unknown
@@ -49,7 +49,7 @@ export const resumeWebhookExecution = ({
           }
     )
 
-  const newVariables = block.options.responseVariableMapping.reduce<
+  const newVariables = block.options?.responseVariableMapping?.reduce<
     VariableWithUnknowValue[]
   >((newVariables, varMapping) => {
     if (!varMapping?.bodyPath || !varMapping.variableId) return newVariables
@@ -66,7 +66,7 @@ export const resumeWebhookExecution = ({
       return newVariables
     }
   }, [])
-  if (newVariables.length > 0) {
+  if (newVariables && newVariables.length > 0) {
     const newSessionState = updateVariablesInSession(state)(newVariables)
     return {
       outgoingEdgeId: block.outgoingEdgeId,

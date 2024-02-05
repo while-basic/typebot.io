@@ -9,21 +9,13 @@ import {
   SlideFade,
   Flex,
 } from '@chakra-ui/react'
-import {
-  InputBlockType,
-  IntegrationBlockType,
-  LogicBlockType,
-  Block,
-  BlockOptions,
-  BlockWithOptions,
-} from '@typebot.io/schemas'
+import { Block, BlockOptions, BlockWithOptions } from '@typebot.io/schemas'
 import { useRef, useState } from 'react'
 import { WaitSettings } from '@/features/blocks/logic/wait/components/WaitSettings'
 import { ScriptSettings } from '@/features/blocks/logic/script/components/ScriptSettings'
 import { JumpSettings } from '@/features/blocks/logic/jump/components/JumpSettings'
 import { MakeComSettings } from '@/features/blocks/integrations/makeCom/components/MakeComSettings'
 import { PabblyConnectSettings } from '@/features/blocks/integrations/pabbly/components/PabblyConnectSettings'
-import { OpenAISettings } from '@/features/blocks/integrations/openai/components/OpenAISettings'
 import { ButtonsBlockSettings } from '@/features/blocks/inputs/buttons/components/ButtonsBlockSettings'
 import { FileInputSettings } from '@/features/blocks/inputs/fileUpload/components/FileInputSettings'
 import { PaymentSettings } from '@/features/blocks/inputs/payment/components/PaymentSettings'
@@ -48,9 +40,15 @@ import { PictureChoiceSettings } from '@/features/blocks/inputs/pictureChoice/co
 import { SettingsHoverBar } from './SettingsHoverBar'
 import { PixelSettings } from '@/features/blocks/integrations/pixel/components/PixelSettings'
 import { ZemanticAiSettings } from '@/features/blocks/integrations/zemanticAi/ZemanticAiSettings'
+import { InputBlockType } from '@typebot.io/schemas/features/blocks/inputs/constants'
+import { IntegrationBlockType } from '@typebot.io/schemas/features/blocks/integrations/constants'
+import { LogicBlockType } from '@typebot.io/schemas/features/blocks/logic/constants'
+import { ForgedBlockSettings } from '../../../../forge/components/ForgedBlockSettings'
+import { OpenAISettings } from '@/features/blocks/integrations/openai/components/OpenAISettings'
 
 type Props = {
   block: BlockWithOptions
+  groupId: string | undefined
   onExpandClick: () => void
   onBlockChange: (updates: Partial<Block>) => void
 }
@@ -71,7 +69,7 @@ export const SettingsPopoverContent = ({ onExpandClick, ...props }: Props) => {
         <PopoverArrow bgColor={arrowColor} />
         <PopoverBody
           py="3"
-          overflowY="scroll"
+          overflowY="auto"
           maxH="400px"
           ref={ref}
           shadow="lg"
@@ -105,11 +103,13 @@ export const SettingsPopoverContent = ({ onExpandClick, ...props }: Props) => {
 
 export const BlockSettings = ({
   block,
+  groupId,
   onBlockChange,
 }: {
   block: BlockWithOptions
+  groupId: string | undefined
   onBlockChange: (block: Partial<Block>) => void
-}): JSX.Element => {
+}): JSX.Element | null => {
   const updateOptions = (options: BlockOptions) => {
     onBlockChange({ options } as Partial<Block>)
   }
@@ -241,12 +241,14 @@ export const BlockSettings = ({
       )
     }
     case LogicBlockType.JUMP: {
-      return (
+      return groupId ? (
         <JumpSettings
-          groupId={block.groupId}
+          groupId={groupId}
           options={block.options}
           onOptionsChange={updateOptions}
         />
+      ) : (
+        <></>
       )
     }
     case LogicBlockType.AB_TEST: {
@@ -318,6 +320,13 @@ export const BlockSettings = ({
     case IntegrationBlockType.ZEMANTIC_AI: {
       return (
         <ZemanticAiSettings block={block} onOptionsChange={updateOptions} />
+      )
+    }
+    case LogicBlockType.CONDITION:
+      return null
+    default: {
+      return (
+        <ForgedBlockSettings block={block} onOptionsChange={updateOptions} />
       )
     }
   }

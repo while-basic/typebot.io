@@ -11,6 +11,10 @@ import { TrashIcon, PlusIcon } from '@/components/icons'
 import { createId } from '@paralleldrive/cuid2'
 import React, { useEffect, useState } from 'react'
 
+const defaultItem = {
+  id: createId(),
+}
+
 type ItemWithId<T> = T & { id: string }
 
 export type TableListItemProps<T> = {
@@ -19,13 +23,14 @@ export type TableListItemProps<T> = {
 }
 
 type Props<T> = {
-  initialItems: ItemWithId<T>[]
+  initialItems?: ItemWithId<T>[]
   isOrdered?: boolean
   addLabel?: string
   newItemDefaultProps?: Partial<T>
-  Item: (props: TableListItemProps<T>) => JSX.Element
+  hasDefaultItem?: boolean
   ComponentBetweenItems?: (props: unknown) => JSX.Element
   onItemsChange: (items: ItemWithId<T>[]) => void
+  children: (props: TableListItemProps<T>) => JSX.Element
 }
 
 export const TableList = <T,>({
@@ -33,15 +38,19 @@ export const TableList = <T,>({
   isOrdered,
   addLabel = 'Add',
   newItemDefaultProps,
-  Item,
+  hasDefaultItem,
+  children,
   ComponentBetweenItems,
   onItemsChange,
 }: Props<T>) => {
-  const [items, setItems] = useState(initialItems)
+  const [items, setItems] = useState(
+    initialItems ?? (hasDefaultItem ? ([defaultItem] as ItemWithId<T>[]) : [])
+  )
   const [showDeleteIndex, setShowDeleteIndex] = useState<number | null>(null)
 
   useEffect(() => {
-    if (items.length && initialItems.length === 0) setItems(initialItems)
+    if (items.length && initialItems && initialItems?.length === 0)
+      setItems(initialItems)
   }, [initialItems, items.length])
 
   const createItem = () => {
@@ -98,7 +107,7 @@ export const TableList = <T,>({
             justifyContent="center"
             pb="4"
           >
-            <Item item={item} onItemChange={handleCellChange(itemIndex)} />
+            {children({ item, onItemChange: handleCellChange(itemIndex) })}
             <Fade
               in={showDeleteIndex === itemIndex}
               style={{

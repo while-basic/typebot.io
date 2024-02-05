@@ -1,17 +1,21 @@
 import { FormLabel, Stack } from '@chakra-ui/react'
 import { DropdownList } from '@/components/DropdownList'
-import { RatingInputOptions, Variable } from '@typebot.io/schemas'
+import { RatingInputBlock, Variable } from '@typebot.io/schemas'
 import React from 'react'
 import { SwitchWithLabel } from '@/components/inputs/SwitchWithLabel'
 import { TextInput } from '@/components/inputs'
 import { VariableSearchInput } from '@/components/inputs/VariableSearchInput'
+import { defaultRatingInputOptions } from '@typebot.io/schemas/features/blocks/inputs/rating/constants'
+import { useTranslate } from '@tolgee/react'
 
 type Props = {
-  options: RatingInputOptions
-  onOptionsChange: (options: RatingInputOptions) => void
+  options: RatingInputBlock['options']
+  onOptionsChange: (options: RatingInputBlock['options']) => void
 }
 
 export const RatingInputSettings = ({ options, onOptionsChange }: Props) => {
+  const { t } = useTranslate()
+
   const handleLengthChange = (length: number) =>
     onOptionsChange({ ...options, length })
 
@@ -21,20 +25,20 @@ export const RatingInputSettings = ({ options, onOptionsChange }: Props) => {
   const handleCustomIconCheck = (isEnabled: boolean) =>
     onOptionsChange({
       ...options,
-      customIcon: { ...options.customIcon, isEnabled },
+      customIcon: { ...options?.customIcon, isEnabled },
     })
 
   const handleIconSvgChange = (svg: string) =>
-    onOptionsChange({ ...options, customIcon: { ...options.customIcon, svg } })
+    onOptionsChange({ ...options, customIcon: { ...options?.customIcon, svg } })
 
   const handleLeftLabelChange = (left: string) =>
-    onOptionsChange({ ...options, labels: { ...options.labels, left } })
+    onOptionsChange({ ...options, labels: { ...options?.labels, left } })
 
   const handleRightLabelChange = (right: string) =>
-    onOptionsChange({ ...options, labels: { ...options.labels, right } })
+    onOptionsChange({ ...options, labels: { ...options?.labels, right } })
 
   const handleButtonLabelChange = (button: string) =>
-    onOptionsChange({ ...options, labels: { ...options.labels, button } })
+    onOptionsChange({ ...options, labels: { ...options?.labels, button } })
 
   const handleVariableChange = (variable?: Variable) =>
     onOptionsChange({ ...options, variableId: variable?.id })
@@ -42,76 +46,98 @@ export const RatingInputSettings = ({ options, onOptionsChange }: Props) => {
   const handleOneClickSubmitChange = (isOneClickSubmitEnabled: boolean) =>
     onOptionsChange({ ...options, isOneClickSubmitEnabled })
 
+  const length = options?.length ?? defaultRatingInputOptions.length
+  const isOneClickSubmitEnabled =
+    options?.isOneClickSubmitEnabled ??
+    defaultRatingInputOptions.isOneClickSubmitEnabled
+
   return (
     <Stack spacing={4}>
       <Stack>
         <FormLabel mb="0" htmlFor="button">
-          Maximum:
+          {t('blocks.inputs.rating.settings.maximum.label')}
         </FormLabel>
         <DropdownList
           onItemSelect={handleLengthChange}
           items={[3, 4, 5, 6, 7, 8, 9, 10]}
-          currentItem={options.length}
+          currentItem={length}
         />
       </Stack>
 
       <Stack>
         <FormLabel mb="0" htmlFor="button">
-          Type:
+          {t('blocks.inputs.rating.settings.type.label')}
         </FormLabel>
         <DropdownList
           onItemSelect={handleTypeChange}
           items={['Icons', 'Numbers'] as const}
-          currentItem={options.buttonType}
+          currentItem={
+            options?.buttonType ?? defaultRatingInputOptions.buttonType
+          }
         />
       </Stack>
 
-      {options.buttonType === 'Icons' && (
+      {options?.buttonType === 'Icons' && (
         <SwitchWithLabel
-          label="Custom icon?"
-          initialValue={options.customIcon.isEnabled}
+          label={t('blocks.inputs.rating.settings.customIcon.label')}
+          initialValue={
+            options?.customIcon?.isEnabled ??
+            defaultRatingInputOptions.customIcon.isEnabled
+          }
           onCheckChange={handleCustomIconCheck}
         />
       )}
-      {options.buttonType === 'Icons' && options.customIcon.isEnabled && (
+      {options?.buttonType === 'Icons' && options.customIcon?.isEnabled && (
         <TextInput
-          label="Icon SVG:"
+          label={t('blocks.inputs.rating.settings.iconSVG.label')}
           defaultValue={options.customIcon.svg}
           onChange={handleIconSvgChange}
           placeholder="<svg>...</svg>"
         />
       )}
       <TextInput
-        label={`${options.buttonType === 'Icons' ? '1' : '0'} label:`}
-        defaultValue={options.labels.left}
+        label={t('blocks.inputs.rating.settings.rateLabel.label', {
+          rate: options?.buttonType === 'Icons' ? '1' : '0',
+        })}
+        defaultValue={options?.labels?.left}
         onChange={handleLeftLabelChange}
-        placeholder="Not likely at all"
+        placeholder={t(
+          'blocks.inputs.rating.settings.notLikely.placeholder.label'
+        )}
       />
       <TextInput
-        label={`${options.length} label:`}
-        defaultValue={options.labels.right}
+        label={t('blocks.inputs.rating.settings.rateLabel.label', {
+          rate: length,
+        })}
+        defaultValue={options?.labels?.right}
         onChange={handleRightLabelChange}
-        placeholder="Extremely likely"
+        placeholder={t(
+          'blocks.inputs.rating.settings.extremelyLikely.placeholder.label'
+        )}
       />
       <SwitchWithLabel
-        label="One click submit"
-        moreInfoContent='If enabled, the answer will be submitted as soon as the user clicks on a rating instead of showing the "Send" button.'
-        initialValue={options.isOneClickSubmitEnabled ?? false}
+        label={t('blocks.inputs.rating.settings.oneClickSubmit.label')}
+        moreInfoContent={t(
+          'blocks.inputs.rating.settings.oneClickSubmit.infoText.label'
+        )}
+        initialValue={isOneClickSubmitEnabled}
         onCheckChange={handleOneClickSubmitChange}
       />
-      {!options.isOneClickSubmitEnabled && (
+      {!isOneClickSubmitEnabled && (
         <TextInput
-          label="Button label:"
-          defaultValue={options.labels.button}
+          label={t('blocks.inputs.settings.button.label')}
+          defaultValue={
+            options?.labels?.button ?? defaultRatingInputOptions.labels.button
+          }
           onChange={handleButtonLabelChange}
         />
       )}
       <Stack>
         <FormLabel mb="0" htmlFor="variable">
-          Save answer in a variable:
+          {t('blocks.inputs.settings.saveAnswer.label')}
         </FormLabel>
         <VariableSearchInput
-          initialVariableId={options.variableId}
+          initialVariableId={options?.variableId}
           onSelectVariable={handleVariableChange}
         />
       </Stack>

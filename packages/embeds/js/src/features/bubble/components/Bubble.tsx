@@ -31,6 +31,7 @@ export const Bubble = (props: BubbleProps) => {
     'theme',
     'autoShowDelay',
   ])
+  const [isMounted, setIsMounted] = createSignal(true)
   const [prefilledVariables, setPrefilledVariables] = createSignal(
     // eslint-disable-next-line solid/reactivity
     botProps.prefilledVariables
@@ -91,6 +92,7 @@ export const Bubble = (props: BubbleProps) => {
         ...existingPrefilledVariables,
         ...data.variables,
       }))
+    if (data.command === 'unmount') unmount()
   }
 
   const openBot = () => {
@@ -126,8 +128,17 @@ export const Bubble = (props: BubbleProps) => {
     setIsPreviewMessageDisplayed(false)
   }
 
+  const unmount = () => {
+    if (isBotOpened()) {
+      closeBot()
+      setTimeout(() => {
+        setIsMounted(false)
+      }, 200)
+    } else setIsMounted(false)
+  }
+
   return (
-    <>
+    <Show when={isMounted()}>
       <style>{styles}</style>
       <Show when={isPreviewMessageDisplayed()}>
         <PreviewMessage
@@ -148,7 +159,12 @@ export const Bubble = (props: BubbleProps) => {
       <div
         part="bot"
         style={{
-          height: 'calc(100% - 80px)',
+          height:
+            props.theme?.button?.size === 'large'
+              ? 'calc(100% - 95px)'
+              : 'calc(100% - 80px)',
+          'max-height': props.theme?.chatWindow?.maxHeight ?? '704px',
+          'max-width': props.theme?.chatWindow?.maxWidth ?? '400px',
           transition:
             'transform 200ms cubic-bezier(0, 1.2, 1, 1), opacity 150ms ease-out',
           'transform-origin':
@@ -159,12 +175,12 @@ export const Bubble = (props: BubbleProps) => {
           'z-index': 42424242,
         }}
         class={
-          'fixed rounded-lg w-full sm:w-[400px] max-h-[704px]' +
+          'fixed rounded-lg w-full' +
           (isBotOpened() ? ' opacity-1' : ' opacity-0 pointer-events-none') +
           (props.theme?.button?.size === 'large'
             ? ' bottom-24'
             : ' bottom-20') +
-          (props.theme?.placement === 'left' ? ' sm:left-5' : ' sm:right-5')
+          (props.theme?.placement === 'left' ? ' left-5' : ' right-5')
         }
       >
         <Show when={isBotStarted()}>
@@ -175,6 +191,6 @@ export const Bubble = (props: BubbleProps) => {
           />
         </Show>
       </div>
-    </>
+    </Show>
   )
 }

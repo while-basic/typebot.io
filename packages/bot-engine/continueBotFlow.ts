@@ -1,15 +1,10 @@
 import {
   AnswerInSessionState,
   Block,
-  BubbleBlockType,
-  ChatReply,
+  ContinueChatResponse,
+  Group,
   InputBlock,
-  InputBlockType,
-  IntegrationBlockType,
-  LogicBlockType,
   SessionState,
-  defaultPaymentInputOptions,
-  invalidEmailDefaultRetryMessage,
 } from '@typebot.io/schemas'
 import { isInputBlock, byId } from '@typebot.io/lib'
 import { executeGroup, parseInput } from './executeGroup'
@@ -17,45 +12,63 @@ import { getNextGroup } from './getNextGroup'
 import { validateEmail } from './blocks/inputs/email/validateEmail'
 import { formatPhoneNumber } from './blocks/inputs/phone/formatPhoneNumber'
 import { validateUrl } from './blocks/inputs/url/validateUrl'
-import { resumeChatCompletion } from './blocks/integrations/openai/resumeChatCompletion'
 import { resumeWebhookExecution } from './blocks/integrations/webhook/resumeWebhookExecution'
 import { upsertAnswer } from './queries/upsertAnswer'
 import { parseButtonsReply } from './blocks/inputs/buttons/parseButtonsReply'
-import { ParsedReply } from './types'
+import { ParsedReply, Reply } from './types'
 import { validateNumber } from './blocks/inputs/number/validateNumber'
 import { parseDateReply } from './blocks/inputs/date/parseDateReply'
 import { validateRatingReply } from './blocks/inputs/rating/validateRatingReply'
 import { parsePictureChoicesReply } from './blocks/inputs/pictureChoice/parsePictureChoicesReply'
-import { parseVariables } from './variables/parseVariables'
-import { updateVariablesInSession } from './variables/updateVariablesInSession'
+import { parseVariables } from '@typebot.io/variables/parseVariables'
+import { updateVariablesInSession } from '@typebot.io/variables/updateVariablesInSession'
 import { startBotFlow } from './startBotFlow'
 import { TRPCError } from '@trpc/server'
 import { parseNumber } from './blocks/inputs/number/parseNumber'
+import { BubbleBlockType } from '@typebot.io/schemas/features/blocks/bubbles/constants'
+import { InputBlockType } from '@typebot.io/schemas/features/blocks/inputs/constants'
+import { defaultPaymentInputOptions } from '@typebot.io/schemas/features/blocks/inputs/payment/constants'
+import { IntegrationBlockType } from '@typebot.io/schemas/features/blocks/integrations/constants'
+import { LogicBlockType } from '@typebot.io/schemas/features/blocks/logic/constants'
+import { defaultEmailInputOptions } from '@typebot.io/schemas/features/blocks/inputs/email/constants'
+import { defaultChoiceInputOptions } from '@typebot.io/schemas/features/blocks/inputs/choice/constants'
+import { defaultPictureChoiceOptions } from '@typebot.io/schemas/features/blocks/inputs/pictureChoice/constants'
+import { defaultFileInputOptions } from '@typebot.io/schemas/features/blocks/inputs/file/constants'
+import { VisitedEdge } from '@typebot.io/prisma'
+import { getBlockById } from '@typebot.io/lib/getBlockById'
+import { ForgedBlock, forgedBlocks } from '@typebot.io/forge-schemas'
+import { enabledBlocks } from '@typebot.io/forge-repository'
+import { resumeChatCompletion } from './blocks/integrations/legacy/openai/resumeChatCompletion'
+import { env } from '@typebot.io/env'
+import { downloadMedia } from './whatsapp/downloadMedia'
+import { uploadFileToBucket } from '@typebot.io/lib/s3/uploadFileToBucket'
 
 type Params = {
   version: 1 | 2
   state: SessionState
+  startTime?: number
 }
 export const continueBotFlow = async (
-  reply: string | undefined,
-  { state, version }: Params
-): Promise<ChatReply & { newSessionState: SessionState }> => {
+  reply: Reply,
+  { state, version, startTime }: Params
+): Promise<
+  ContinueChatResponse & {
+    newSessionState: SessionState
+    visitedEdges: VisitedEdge[]
+  }
+> => {
   let firstBubbleWasStreamed = false
   let newSessionState = { ...state }
+  const visitedEdges: VisitedEdge[] = []
 
-  if (!newSessionState.currentBlock) return startBotFlow({ state, version })
+  if (!newSessionState.currentBlockId) return startBotFlow({ state, version })
 
-  const group = state.typebotsQueue[0].typebot.groups.find(
-    (group) => group.id === state.currentBlock?.groupId
+  const { block, group, blockIndex } = getBlockById(
+    newSessionState.currentBlockId,
+    state.typebotsQueue[0].typebot.groups
   )
-  const blockIndex =
-    group?.blocks.findIndex(
-      (block) => block.id === state.currentBlock?.blockId
-    ) ?? -1
 
-  const block = blockIndex >= 0 ? group?.blocks[blockIndex ?? 0] : null
-
-  if (!block || !group)
+  if (!block)
     throw new TRPCError({
       code: 'INTERNAL_SERVER_ERROR',
       message: 'Group / block not found',
@@ -63,16 +76,34 @@ export const continueBotFlow = async (
 
   if (block.type === LogicBlockType.SET_VARIABLE) {
     const existingVariable = state.typebotsQueue[0].typebot.variables.find(
-      byId(block.options.variableId)
+      byId(block.options?.variableId)
     )
-    if (existingVariable && reply) {
+    if (existingVariable && reply && typeof reply === 'string') {
       const newVariable = {
         ...existingVariable,
         value: safeJsonParse(reply),
       }
       newSessionState = updateVariablesInSession(state)([newVariable])
     }
-  } else if (reply && block.type === IntegrationBlockType.WEBHOOK) {
+  }
+  // Legacy
+  else if (
+    block.type === IntegrationBlockType.OPEN_AI &&
+    block.options?.task === 'Create chat completion'
+  ) {
+    firstBubbleWasStreamed = true
+    if (reply && typeof reply === 'string') {
+      const result = await resumeChatCompletion(state, {
+        options: block.options,
+        outgoingEdgeId: block.outgoingEdgeId,
+      })(reply)
+      newSessionState = result.newSessionState
+    }
+  } else if (
+    reply &&
+    block.type === IntegrationBlockType.WEBHOOK &&
+    typeof reply === 'string'
+  ) {
     const result = resumeWebhookExecution({
       state,
       block,
@@ -80,42 +111,67 @@ export const continueBotFlow = async (
     })
     if (result.newSessionState) newSessionState = result.newSessionState
   } else if (
-    block.type === IntegrationBlockType.OPEN_AI &&
-    block.options.task === 'Create chat completion'
+    enabledBlocks.includes(block.type as (typeof enabledBlocks)[number])
   ) {
-    firstBubbleWasStreamed = true
     if (reply) {
-      const result = await resumeChatCompletion(state, {
-        options: block.options,
-        outgoingEdgeId: block.outgoingEdgeId,
-      })(reply)
-      newSessionState = result.newSessionState
+      const options = (block as ForgedBlock).options
+      const action = forgedBlocks
+        .find((b) => b.id === block.type)
+        ?.actions.find((a) => a.name === options?.action)
+      if (action) {
+        if (action.run?.stream?.getStreamVariableId) {
+          firstBubbleWasStreamed = true
+          const variableToUpdate =
+            state.typebotsQueue[0].typebot.variables.find(
+              (v) => v.id === action?.run?.stream?.getStreamVariableId(options)
+            )
+          if (variableToUpdate)
+            newSessionState = updateVariablesInSession(state)([
+              {
+                ...variableToUpdate,
+                value: reply,
+              },
+            ])
+        }
+
+        if (
+          action.run?.web?.displayEmbedBubble?.waitForEvent?.getSaveVariableId
+        ) {
+          const variableToUpdate =
+            state.typebotsQueue[0].typebot.variables.find(
+              (v) =>
+                v.id ===
+                action?.run?.web?.displayEmbedBubble?.waitForEvent?.getSaveVariableId?.(
+                  options
+                )
+            )
+          if (variableToUpdate)
+            newSessionState = updateVariablesInSession(state)([
+              {
+                ...variableToUpdate,
+                value: reply,
+              },
+            ])
+        }
+      }
     }
   }
 
   let formattedReply: string | undefined
 
   if (isInputBlock(block)) {
-    const parsedReplyResult = parseReply(newSessionState)(reply, block)
+    const parsedReplyResult = await parseReply(newSessionState)(reply, block)
 
     if (parsedReplyResult.status === 'fail')
       return {
         ...(await parseRetryMessage(newSessionState)(block)),
         newSessionState,
+        visitedEdges: [],
       }
 
     formattedReply =
       'reply' in parsedReplyResult ? parsedReplyResult.reply : undefined
-    const nextEdgeId = getOutgoingEdgeId(newSessionState)(block, formattedReply)
-    const itemId = nextEdgeId
-      ? newSessionState.typebotsQueue[0].typebot.edges.find(byId(nextEdgeId))
-          ?.from.itemId
-      : undefined
-    newSessionState = await processAndSaveAnswer(
-      state,
-      block,
-      itemId
-    )(formattedReply)
+    newSessionState = await processAndSaveAnswer(state, block)(formattedReply)
   }
 
   const groupHasMoreBlocks = blockIndex < group.blocks.length - 1
@@ -127,8 +183,14 @@ export const continueBotFlow = async (
       {
         ...group,
         blocks: group.blocks.slice(blockIndex + 1),
-      },
-      { version, state: newSessionState, firstBubbleWasStreamed }
+      } as Group,
+      {
+        version,
+        state: newSessionState,
+        visitedEdges,
+        firstBubbleWasStreamed,
+        startTime,
+      }
     )
     return {
       ...chatReply,
@@ -143,9 +205,12 @@ export const continueBotFlow = async (
       newSessionState,
       lastMessageNewFormat:
         formattedReply !== reply ? formattedReply : undefined,
+      visitedEdges,
     }
 
   const nextGroup = await getNextGroup(newSessionState)(nextEdgeId)
+
+  if (nextGroup.visitedEdge) visitedEdges.push(nextGroup.visitedEdge)
 
   newSessionState = nextGroup.newSessionState
 
@@ -155,12 +220,15 @@ export const continueBotFlow = async (
       newSessionState,
       lastMessageNewFormat:
         formattedReply !== reply ? formattedReply : undefined,
+      visitedEdges,
     }
 
   const chatReply = await executeGroup(nextGroup.group, {
     version,
     state: newSessionState,
     firstBubbleWasStreamed,
+    visitedEdges,
+    startTime,
   })
 
   return {
@@ -170,10 +238,10 @@ export const continueBotFlow = async (
 }
 
 const processAndSaveAnswer =
-  (state: SessionState, block: InputBlock, itemId?: string) =>
+  (state: SessionState, block: InputBlock) =>
   async (reply: string | undefined): Promise<SessionState> => {
     if (!reply) return state
-    let newState = await saveAnswer(state, block, itemId)(reply)
+    let newState = await saveAnswer(state, block)(reply)
     newState = saveVariableValueIfAny(newState, block)(reply)
     return newState
   }
@@ -181,9 +249,9 @@ const processAndSaveAnswer =
 const saveVariableValueIfAny =
   (state: SessionState, block: InputBlock) =>
   (reply: string): SessionState => {
-    if (!block.options.variableId) return state
+    if (!block.options?.variableId) return state
     const foundVariable = state.typebotsQueue[0].typebot.variables.find(
-      (variable) => variable.id === block.options.variableId
+      (variable) => variable.id === block.options?.variableId
     )
     if (!foundVariable) return state
 
@@ -201,8 +269,11 @@ const saveVariableValueIfAny =
 
 const parseRetryMessage =
   (state: SessionState) =>
-  async (block: InputBlock): Promise<Pick<ChatReply, 'messages' | 'input'>> => {
+  async (
+    block: InputBlock
+  ): Promise<Pick<ContinueChatResponse, 'messages' | 'input'>> => {
     const retryMessage =
+      block.options &&
       'retryMessageContent' in block.options &&
       block.options.retryMessageContent
         ? block.options.retryMessageContent
@@ -224,44 +295,58 @@ const parseRetryMessage =
 const parseDefaultRetryMessage = (block: InputBlock): string => {
   switch (block.type) {
     case InputBlockType.EMAIL:
-      return invalidEmailDefaultRetryMessage
+      return defaultEmailInputOptions.retryMessageContent
     case InputBlockType.PAYMENT:
-      return defaultPaymentInputOptions.retryMessageContent as string
+      return defaultPaymentInputOptions.retryMessageContent
     default:
       return 'Invalid message. Please, try again.'
   }
 }
 
 const saveAnswer =
-  (state: SessionState, block: InputBlock, itemId?: string) =>
+  (state: SessionState, block: InputBlock) =>
   async (reply: string): Promise<SessionState> => {
+    const groupId = state.typebotsQueue[0].typebot.groups.find((group) =>
+      group.blocks.some((blockInGroup) => blockInGroup.id === block.id)
+    )?.id
+    if (!groupId) throw new Error('saveAnswer: Group not found')
     await upsertAnswer({
-      block,
       answer: {
         blockId: block.id,
-        itemId,
-        groupId: block.groupId,
+        groupId,
         content: reply,
-        variableId: block.options.variableId,
+        variableId: block.options?.variableId,
       },
       reply,
       state,
-      itemId,
     })
 
-    const key = block.options.variableId
+    const key = block.options?.variableId
       ? state.typebotsQueue[0].typebot.variables.find(
-          (variable) => variable.id === block.options.variableId
+          (variable) => variable.id === block.options?.variableId
         )?.name
-      : state.typebotsQueue[0].typebot.groups.find((group) =>
-          group.blocks.find((blockInGroup) => blockInGroup.id === block.id)
-        )?.title
+      : parseGroupKey(block.id, { state })
 
     return setNewAnswerInState(state)({
       key: key ?? block.id,
       value: reply,
     })
   }
+
+const parseGroupKey = (blockId: string, { state }: { state: SessionState }) => {
+  const group = state.typebotsQueue[0].typebot.groups.find((group) =>
+    group.blocks.find((b) => b.id === blockId)
+  )
+  if (!group) return
+
+  const inputBlockNumber = group.blocks
+    .filter(isInputBlock)
+    .findIndex((b) => b.id === blockId)
+
+  return inputBlockNumber > 0
+    ? `${group.title} (${inputBlockNumber})`
+    : group?.title
+}
 
 const setNewAnswerInState =
   (state: SessionState) => (newAnswer: AnswerInSessionState) => {
@@ -289,7 +374,10 @@ const getOutgoingEdgeId =
     const variables = state.typebotsQueue[0].typebot.variables
     if (
       block.type === InputBlockType.CHOICE &&
-      !block.options.isMultipleChoice &&
+      !(
+        block.options?.isMultipleChoice ??
+        defaultChoiceInputOptions.isMultipleChoice
+      ) &&
       reply
     ) {
       const matchedItem = block.items.find(
@@ -301,7 +389,10 @@ const getOutgoingEdgeId =
     }
     if (
       block.type === InputBlockType.PICTURE_CHOICE &&
-      !block.options.isMultipleChoice &&
+      !(
+        block.options?.isMultipleChoice ??
+        defaultPictureChoiceOptions.isMultipleChoice
+      ) &&
       reply
     ) {
       const matchedItem = block.items.find(
@@ -316,71 +407,97 @@ const getOutgoingEdgeId =
 
 const parseReply =
   (state: SessionState) =>
-  (inputValue: string | undefined, block: InputBlock): ParsedReply => {
+  async (reply: Reply, block: InputBlock): Promise<ParsedReply> => {
+    if (reply && typeof reply !== 'string') {
+      if (block.type !== InputBlockType.FILE) return { status: 'fail' }
+      if (block.options?.visibility !== 'Public') {
+        return {
+          status: 'success',
+          reply:
+            env.NEXTAUTH_URL +
+            `/api/typebots/${state.typebotsQueue[0].typebot.id}/whatsapp/media/${reply.mediaId}`,
+        }
+      }
+      const { file, mimeType } = await downloadMedia({
+        mediaId: reply.mediaId,
+        systemUserAccessToken: reply.accessToken,
+      })
+      const url = await uploadFileToBucket({
+        file,
+        key: `public/workspaces/${reply.workspaceId}/typebots/${state.typebotsQueue[0].typebot.id}/results/${state.typebotsQueue[0].resultId}/${reply.mediaId}`,
+        mimeType,
+      })
+      return {
+        status: 'success',
+        reply: url,
+      }
+    }
     switch (block.type) {
       case InputBlockType.EMAIL: {
-        if (!inputValue) return { status: 'fail' }
-        const isValid = validateEmail(inputValue)
+        if (!reply) return { status: 'fail' }
+        const isValid = validateEmail(reply)
         if (!isValid) return { status: 'fail' }
-        return { status: 'success', reply: inputValue }
+        return { status: 'success', reply: reply }
       }
       case InputBlockType.PHONE: {
-        if (!inputValue) return { status: 'fail' }
+        if (!reply) return { status: 'fail' }
         const formattedPhone = formatPhoneNumber(
-          inputValue,
-          block.options.defaultCountryCode
+          reply,
+          block.options?.defaultCountryCode
         )
         if (!formattedPhone) return { status: 'fail' }
         return { status: 'success', reply: formattedPhone }
       }
       case InputBlockType.URL: {
-        if (!inputValue) return { status: 'fail' }
-        const isValid = validateUrl(inputValue)
+        if (!reply) return { status: 'fail' }
+        const isValid = validateUrl(reply)
         if (!isValid) return { status: 'fail' }
-        return { status: 'success', reply: inputValue }
+        return { status: 'success', reply: reply }
       }
       case InputBlockType.CHOICE: {
-        if (!inputValue) return { status: 'fail' }
-        return parseButtonsReply(state)(inputValue, block)
+        if (!reply) return { status: 'fail' }
+        return parseButtonsReply(state)(reply, block)
       }
       case InputBlockType.NUMBER: {
-        if (!inputValue) return { status: 'fail' }
-        const isValid = validateNumber(inputValue, {
+        if (!reply) return { status: 'fail' }
+        const isValid = validateNumber(reply, {
           options: block.options,
           variables: state.typebotsQueue[0].typebot.variables,
         })
         if (!isValid) return { status: 'fail' }
-        return { status: 'success', reply: parseNumber(inputValue) }
+        return { status: 'success', reply: parseNumber(reply) }
       }
       case InputBlockType.DATE: {
-        if (!inputValue) return { status: 'fail' }
-        return parseDateReply(inputValue, block)
+        if (!reply) return { status: 'fail' }
+        return parseDateReply(reply, block)
       }
       case InputBlockType.FILE: {
-        if (!inputValue)
-          return block.options.isRequired
+        if (!reply)
+          return block.options?.isRequired ?? defaultFileInputOptions.isRequired
             ? { status: 'fail' }
             : { status: 'skip' }
-        return { status: 'success', reply: inputValue }
+        const urls = reply.split(', ')
+        const status = urls.some((url) => validateUrl(url)) ? 'success' : 'fail'
+        return { status, reply: reply }
       }
       case InputBlockType.PAYMENT: {
-        if (!inputValue) return { status: 'fail' }
-        if (inputValue === 'fail') return { status: 'fail' }
-        return { status: 'success', reply: inputValue }
+        if (!reply) return { status: 'fail' }
+        if (reply === 'fail') return { status: 'fail' }
+        return { status: 'success', reply: reply }
       }
       case InputBlockType.RATING: {
-        if (!inputValue) return { status: 'fail' }
-        const isValid = validateRatingReply(inputValue, block)
+        if (!reply) return { status: 'fail' }
+        const isValid = validateRatingReply(reply, block)
         if (!isValid) return { status: 'fail' }
-        return { status: 'success', reply: inputValue }
+        return { status: 'success', reply: reply }
       }
       case InputBlockType.PICTURE_CHOICE: {
-        if (!inputValue) return { status: 'fail' }
-        return parsePictureChoicesReply(state)(inputValue, block)
+        if (!reply) return { status: 'fail' }
+        return parsePictureChoicesReply(state)(reply, block)
       }
       case InputBlockType.TEXT: {
-        if (!inputValue) return { status: 'fail' }
-        return { status: 'success', reply: inputValue }
+        if (!reply) return { status: 'fail' }
+        return { status: 'success', reply: reply }
       }
     }
   }

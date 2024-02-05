@@ -1,9 +1,8 @@
-import { useEventListener } from '@chakra-ui/react'
 import {
   AbTestBlock,
-  DraggableBlock,
-  DraggableBlockType,
-  Item,
+  BlockV6,
+  BlockWithItems,
+  ItemV6,
 } from '@typebot.io/schemas'
 import {
   createContext,
@@ -17,21 +16,33 @@ import {
   useState,
 } from 'react'
 import { Coordinates } from '../types'
+import { LogicBlockType } from '@typebot.io/schemas/features/blocks/logic/constants'
+import { useEventListener } from '@/hooks/useEventListener'
 
 type NodeElement = {
   id: string
   element: HTMLDivElement
 }
 
-export type DraggabbleItem = Exclude<Item, AbTestBlock['items'][number]>
+export type BlockWithCreatableItems = Exclude<
+  BlockWithItems,
+  { type: LogicBlockType.AB_TEST }
+>
+
+export type DraggableItem = Exclude<ItemV6, AbTestBlock['items'][number]> & {
+  type: BlockWithCreatableItems['type']
+  blockId: string
+}
 
 const graphDndContext = createContext<{
-  draggedBlockType?: DraggableBlockType
-  setDraggedBlockType: Dispatch<SetStateAction<DraggableBlockType | undefined>>
-  draggedBlock?: DraggableBlock
-  setDraggedBlock: Dispatch<SetStateAction<DraggableBlock | undefined>>
-  draggedItem?: DraggabbleItem
-  setDraggedItem: Dispatch<SetStateAction<DraggabbleItem | undefined>>
+  draggedBlockType?: BlockV6['type']
+  setDraggedBlockType: Dispatch<SetStateAction<BlockV6['type'] | undefined>>
+  draggedBlock?: BlockV6 & { groupId: string }
+  setDraggedBlock: Dispatch<
+    SetStateAction<(BlockV6 & { groupId: string }) | undefined>
+  >
+  draggedItem?: DraggableItem
+  setDraggedItem: Dispatch<SetStateAction<DraggableItem | undefined>>
   mouseOverGroup?: NodeElement
   setMouseOverGroup: (node: NodeElement | undefined) => void
   mouseOverBlock?: NodeElement
@@ -43,11 +54,13 @@ const graphDndContext = createContext<{
 export type NodePosition = { absolute: Coordinates; relative: Coordinates }
 
 export const GraphDndProvider = ({ children }: { children: ReactNode }) => {
-  const [draggedBlock, setDraggedBlock] = useState<DraggableBlock>()
-  const [draggedBlockType, setDraggedBlockType] = useState<
-    DraggableBlockType | undefined
+  const [draggedBlock, setDraggedBlock] = useState<
+    BlockV6 & { groupId: string }
   >()
-  const [draggedItem, setDraggedItem] = useState<DraggabbleItem | undefined>()
+  const [draggedBlockType, setDraggedBlockType] = useState<
+    BlockV6['type'] | undefined
+  >()
+  const [draggedItem, setDraggedItem] = useState<DraggableItem | undefined>()
   const [mouseOverGroup, _setMouseOverGroup] = useState<NodeElement>()
   const [mouseOverBlock, _setMouseOverBlock] = useState<NodeElement>()
 
@@ -92,11 +105,13 @@ export const useDragDistance = ({
   onDrag,
   distanceTolerance = 20,
   isDisabled = false,
+  deps = [],
 }: {
   ref: React.MutableRefObject<HTMLDivElement | null>
   onDrag: (position: { absolute: Coordinates; relative: Coordinates }) => void
   distanceTolerance?: number
   isDisabled: boolean
+  deps?: unknown[]
 }) => {
   const mouseDownPosition = useRef<{
     absolute: Coordinates
@@ -106,7 +121,7 @@ export const useDragDistance = ({
   const handleMouseUp = () => {
     if (mouseDownPosition) mouseDownPosition.current = undefined
   }
-  useEventListener('mouseup', handleMouseUp)
+  useEventListener('mouseup', handleMouseUp, undefined, undefined, deps)
 
   const handleMouseDown = (e: MouseEvent) => {
     if (isDisabled || !ref.current) return
@@ -120,7 +135,7 @@ export const useDragDistance = ({
       },
     }
   }
-  useEventListener('mousedown', handleMouseDown, ref.current)
+  useEventListener('mousedown', handleMouseDown, ref, undefined, deps)
 
   useEffect(() => {
     let triggered = false
